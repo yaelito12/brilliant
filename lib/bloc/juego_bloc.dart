@@ -10,6 +10,10 @@ class JuegoBloc extends Bloc<JuegoEvent, JuegoState> {
       emit(JuegoListo());
     });
 
+    on<ValoresInicialesIncompletos>((event, emit) {
+      emit(JuegoEsperandoValores());
+    });
+
     // Cuando el usuario intenta avanzar (ej. presionar un botón de "Jugar" o "Siguiente")
     on<IntentarAvanzar>((event, emit) {
       if (state is JuegoEsperandoValores) {
@@ -22,4 +26,3 @@ class JuegoBloc extends Bloc<JuegoEvent, JuegoState> {
     });
   }
 }
-
