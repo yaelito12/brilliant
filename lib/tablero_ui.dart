@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'tablero.dart';
 import 'zona.dart';
@@ -58,9 +59,9 @@ class _TableroViewState extends State<_TableroView> {
       'am5': Zona(id: 'am5', tipo: TipoAmarillo(), capacidad: 1),
       've1': Zona(id: 've1', tipo: TipoVerde(), capacidad: 6),
       've2': Zona(id: 've2', tipo: TipoVerde(), capacidad: 6),
-      'az1': Zona(id: 'az1', tipo: TipoAzul(), capacidad: 3),
+      'az1': Zona(id: 'az1', tipo: TipoAzul(), capacidad: 4),
       'az2': Zona(id: 'az2', tipo: TipoAzul(), capacidad: 4),
-      'mo1': Zona(id: 'mo1', tipo: TipoMorado(), capacidad: 7),
+      'mo1': Zona(id: 'mo1', tipo: TipoMorado(), capacidad: 6),
       'mo2': Zona(id: 'mo2', tipo: TipoMorado(), capacidad: 6),
       'ro1': Zona(id: 'ro1', tipo: TipoRojo(), capacidad: 6),
       'ro2': Zona(id: 'ro2', tipo: TipoRojo(), capacidad: 6),
@@ -80,12 +81,12 @@ class _TableroViewState extends State<_TableroView> {
     mapear('am5', [[6, 6]]);
     mapear('ve1', [[0,1], [1,0], [1,1], [2,0], [3,0], [4,0]]);
     mapear('ve2', [[1,6], [2,5], [2,6], [3,4], [3,5], [3,6]]);
-    mapear('az1', [[0,2], [1,2], [2,3]]);
-    mapear('az2', [[4,5], [4,6], [5,5], [5,6]]);
-    mapear('mo1', [[0,3], [0,4], [0,5], [1,3], [1,4], [1,5], [2,4]]);
+    mapear('az1', [[0,2], [1,2], [1,3], [2,3]]);
+    mapear('az2', [[4,6], [5,5], [5,6], [6,5]]);
+    mapear('mo1', [[0,3], [0,4], [0,5], [1,4], [1,5], [2,4]]);
     mapear('mo2', [[3,2], [4,2], [4,3], [5,2], [6,1], [6,2]]);
     mapear('ro1', [[2,1], [2,2], [3,1], [4,1], [5,0], [5,1]]);
-    mapear('ro2', [[4,4], [5,3], [5,4], [6,3], [6,4], [6,5]]);
+    mapear('ro2', [[4,4], [4,5], [5,3], [5,4], [6,3], [6,4]]);
 
     return Tablero(filas: 7, columnas: 7, zonas: zonas, mapeo: mapeo);
   }
@@ -103,108 +104,125 @@ class _TableroViewState extends State<_TableroView> {
 
   void _mostrarSelectorNumero(BuildContext context, Coordenada coordenada) {
     final bloc = context.read<JuegoBloc>();
-    // El número que esta celda ya tenía (si se está cambiando)
     final valorActual = _valoresIniciales[coordenada];
-    // Números ocupados por OTRAS casillas (no contar el propio valor de esta celda)
     final ocupadosPorOtros = _valoresIniciales.entries
         .where((e) => e.key != coordenada)
         .map((e) => e.value)
         .toSet();
 
+    final focusNode = FocusNode();
+    focusNode.requestFocus();
+
+    void seleccionarNumero(int numero) {
+      if (ocupadosPorOtros.contains(numero)) return; // No permitir si está ocupado
+      Navigator.pop(context);
+      setState(() {
+        _valoresIniciales[coordenada] = numero;
+      });
+      if (!_todasLasCasillasInicalesLlenas) {
+        bloc.add(ValoresInicialesIncompletos());
+      }
+    }
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) {
-        return Container(
-          margin: const EdgeInsets.all(16),
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Elige un número (1-6) — sin repetir',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Cada casilla inicial debe tener un número diferente',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: List.generate(6, (i) {
-                  final numero = i + 1;
-                  final estaOcupado = ocupadosPorOtros.contains(numero);
-                  final esSeleccionado = valorActual == numero;
+        return KeyboardListener(
+          focusNode: focusNode,
+          onKeyEvent: (event) {
+            if (event is KeyDownEvent) {
+              final keyLabel = event.logicalKey.keyLabel;
+              if (['1', '2', '3', '4', '5', '6'].contains(keyLabel)) {
+                seleccionarNumero(int.parse(keyLabel));
+              } else if (event.logicalKey.keyLabel == 'Backspace' || event.logicalKey.keyLabel == 'Delete') {
+                if (valorActual != null) {
+                  Navigator.pop(context);
+                  setState(() {
+                    _valoresIniciales.remove(coordenada);
+                  });
+                  bloc.add(ValoresInicialesIncompletos());
+                }
+              }
+            }
+          },
+          child: Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Elige un número (1-6) — sin repetir',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Puedes presionar un número en tu teclado',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: List.generate(6, (i) {
+                    final numero = i + 1;
+                    final estaOcupado = ocupadosPorOtros.contains(numero);
+                    final esSeleccionado = valorActual == numero;
 
-                  return GestureDetector(
-                    onTap: estaOcupado
-                        ? null // Deshabilitado si ya lo usa otra casilla
-                        : () {
-                            Navigator.pop(context);
-                            setState(() {
-                              _valoresIniciales[coordenada] = numero;
-                            });
-                            
-                            // Ya no disparamos el BLoC automáticamente aquí.
-                            // Solo validamos que si faltan, nos aseguremos que el BLoC siga en "esperando"
-                            if (!_todasLasCasillasInicalesLlenas) {
-                              bloc.add(ValoresInicialesIncompletos());
-                            }
-                          },
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: estaOcupado
-                            ? Colors.grey.shade300       // Gris = ya usado
-                            : esSeleccionado
-                                ? Colors.orange.shade600 // Naranja = seleccionado actualmente
-                                : Colors.teal.shade600,  // Teal = disponible
-                        shape: BoxShape.circle,
-                        border: esSeleccionado
-                            ? Border.all(color: Colors.white, width: 3)
-                            : null,
-                      ),
-                      child: Center(
-                        child: Text(
-                          '$numero',
-                          style: TextStyle(
-                            color: estaOcupado ? Colors.grey.shade500 : Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
+                    return GestureDetector(
+                      onTap: estaOcupado ? null : () => seleccionarNumero(numero),
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: estaOcupado
+                              ? Colors.grey.shade300
+                              : esSeleccionado
+                                  ? Colors.orange.shade600
+                                  : Colors.teal.shade600,
+                          shape: BoxShape.circle,
+                          border: esSeleccionado
+                              ? Border.all(color: Colors.white, width: 3)
+                              : null,
+                        ),
+                        child: Center(
+                          child: Text(
+                            '$numero',
+                            style: TextStyle(
+                              color: estaOcupado ? Colors.grey.shade500 : Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  );
-                }),
-              ),
-              const SizedBox(height: 16),
-              // Botón para borrar/deseleccionar
-              TextButton.icon(
-                onPressed: valorActual == null 
-                    ? null 
-                    : () {
-                        Navigator.pop(context);
-                        setState(() {
-                          _valoresIniciales.remove(coordenada);
-                        });
-                        bloc.add(ValoresInicialesIncompletos());
-                      },
-                icon: Icon(Icons.delete, color: valorActual == null ? Colors.grey : Colors.red),
-                label: Text('Borrar número', style: TextStyle(color: valorActual == null ? Colors.grey : Colors.red)),
-              ),
-            ],
+                    );
+                  }),
+                ),
+                const SizedBox(height: 16),
+                TextButton.icon(
+                  onPressed: valorActual == null 
+                      ? null 
+                      : () {
+                          Navigator.pop(context);
+                          setState(() {
+                            _valoresIniciales.remove(coordenada);
+                          });
+                          bloc.add(ValoresInicialesIncompletos());
+                        },
+                  icon: Icon(Icons.delete, color: valorActual == null ? Colors.grey : Colors.red),
+                  label: Text('Borrar número (Supr)', style: TextStyle(color: valorActual == null ? Colors.grey : Colors.red)),
+                ),
+              ],
+            ),
           ),
         );
       },
-    );
+    ).whenComplete(() => focusNode.dispose());
   }
 
   @override
