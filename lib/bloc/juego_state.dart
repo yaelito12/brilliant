@@ -1,13 +1,18 @@
+import '../tablero.dart';
+
 abstract class JuegoState {
   final String mensaje;
-  JuegoState(this.mensaje);
+  final Map<Coordenada, int> valoresIniciales;
+
+  JuegoState(this.mensaje, this.valoresIniciales);
 }
 
 class JuegoEsperandoValores extends JuegoState {
-  JuegoEsperandoValores([super.mensaje = 'Esperando que se configuren los valores iniciales.']);
+  JuegoEsperandoValores([String mensaje = 'Esperando que se configuren los valores iniciales.', Map<Coordenada, int> valores = const {}]) 
+      : super(mensaje, valores);
 }
 
 class JuegoListo extends JuegoState {
-  JuegoListo([super.mensaje = '¡Valores listos! Puedes empezar a jugar.']);
+  JuegoListo([String mensaje = '¡Valores listos! Puedes empezar a jugar.', Map<Coordenada, int> valores = const {}]) 
+      : super(mensaje, valores);
 }
-
