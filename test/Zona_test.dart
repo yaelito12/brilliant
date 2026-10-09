@@ -66,4 +66,57 @@ void main() {
       expect(a == b, isFalse);
     });
   });
+
+  group('Zona - puntuacion', () {
+    test('una zona incompleta no da puntos', () {
+      final zona = Zona(id: 'z1', tipo: TipoAzul(), capacidad: 4, valores: [3, 3]);
+      expect(zona.puntuacion(), 0);
+    });
+
+    test('una zona completa da los puntos del lugar indicado', () {
+      final zona = Zona(id: 'z1', tipo: TipoAzul(), capacidad: 2, valores: [3, 3]);
+      expect(zona.puntuacion(), 7); // 1º por defecto
+      expect(zona.puntuacion(lugar: 2), 5);
+      expect(zona.puntuacion(lugar: 3), 3);
+    });
+
+    test('un lugar sin puntos definidos (4º) da 0', () {
+      final zona = Zona(id: 'z1', tipo: TipoVerde(), capacidad: 1, valores: [1]);
+      expect(zona.puntuacion(lugar: 4), 0);
+    });
+  });
+
+  group('Zona - inmutabilidad', () {
+    test('agregar no modifica la zona original', () {
+      final original = Zona(id: 'z1', tipo: TipoVerde(), capacidad: 3, valores: [1]);
+      original.agregar(2);
+      expect(original.valores, [1]);
+    });
+  });
+
+  group('Zona - puntuacion', () {
+    test('una zona incompleta no da puntos', () {
+      final zona = Zona(id: 'r', tipo: TipoRojo(), capacidad: 3, valores: [1, 2]);
+      expect(zona.puntuacion(), 0);
+    });
+
+    test('una zona completa da los puntos del lugar indicado', () {
+      final zona = Zona(id: 'r', tipo: TipoRojo(), capacidad: 2, valores: [1, 2]);
+      expect(zona.puntuacion(), 6); // por defecto, 1er lugar
+      expect(zona.puntuacion(lugar: 1), 6);
+      expect(zona.puntuacion(lugar: 2), 4);
+      expect(zona.puntuacion(lugar: 3), 2);
+    });
+
+    test('un lugar sin puntos definidos da 0', () {
+      final zona = Zona(id: 'a', tipo: TipoAzul(), capacidad: 1, valores: [3]);
+      expect(zona.puntuacion(lugar: 4), 0);
+    });
+
+    test('agregar no modifica la zona original', () {
+      final zona = Zona(id: 'v', tipo: TipoVerde(), capacidad: 3, valores: [1]);
+      zona.agregar(2);
+      expect(zona.valores, [1]);
+    });
+  });
 }

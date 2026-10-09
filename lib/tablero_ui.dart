@@ -291,13 +291,10 @@ class _TableroViewState extends State<_TableroView> {
             } else if (completoZona) {
               final id = completadas.last;
               final color = nombreDeTipo(tablero.zonas[id]!.tipo).toLowerCase();
-              final puntos = tablero.puntosDe(id);
               _mostrarSnack(
                 context,
                 Icons.star,
-                puntos > 0
-                    ? '¡Zona $color completada en ${tablero.lugarDe(id)}º lugar! +$puntos puntos'
-                    : 'Zona $color completada, pero ya no da puntos',
+                '¡Zona $color completada! +${tablero.puntosDe(id)} puntos',
               );
             }
           },
@@ -935,20 +932,51 @@ class _LeyendaZonas extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'La 1ª zona de un color que completes da más puntos, '
-            'la 2ª menos y la 3ª aún menos. Los tachados ya los ganaste.',
+            '1º, 2º y 3º son los puntos para el primer, segundo y tercer '
+            'jugador en llenar esa zona. Por ahora cada zona que llenes '
+            'da los del 1º, aunque ya hayas llenado otra del mismo color.',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
+          _buildEncabezado(),
+          const Divider(height: 8),
           for (final zonas in grupos) _buildFila(zonas),
         ],
       ),
     );
   }
 
+  static const _anchoLugar = 30.0;
+  static const _anchoCompletas = 34.0;
+
+  /// Títulos de las columnas: 1º, 2º, 3º y zonas llenas.
+  Widget _buildEncabezado() {
+    final estilo = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.bold,
+      color: Colors.grey.shade600,
+    );
+    return Row(
+      children: [
+        Expanded(child: Text('Color y regla', style: estilo)),
+        for (final lugar in ['1º', '2º', '3º'])
+          SizedBox(
+            width: _anchoLugar,
+            child: Text(lugar, textAlign: TextAlign.center, style: estilo),
+          ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: _anchoCompletas,
+          child: Text('Llenas', textAlign: TextAlign.right, style: estilo),
+        ),
+      ],
+    );
+  }
+
   Widget _buildFila(List<Zona> zonas) {
     final tipo = zonas.first.tipo;
     final completas = zonas.where((z) => z.estaCompleta).length;
+    final lugares = tipo.puntuaciones.keys.toList()..sort();
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
@@ -977,11 +1005,25 @@ class _LeyendaZonas extends StatelessWidget {
               style: const TextStyle(fontSize: 12, color: Color(0xFF1B3B4D)),
             ),
           ),
-          const SizedBox(width: 8),
-          _PuntosPorLugar(tipo: tipo, ganados: completas),
+          // Puntos del 1º, 2º y 3º en llenar la zona (el 1º resaltado)
+          for (final lugar in lugares.take(3))
+            SizedBox(
+              width: _anchoLugar,
+              child: Text(
+                '${tipo.puntuaciones[lugar]}',
+                textAlign: TextAlign.center,
+                style: lugar == 1
+                    ? const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        color: _colorTexto,
+                      )
+                    : TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+            ),
           const SizedBox(width: 8),
           SizedBox(
-            width: 34,
+            width: _anchoCompletas,
             child: Text(
               '$completas/${zonas.length}',
               textAlign: TextAlign.right,
@@ -1197,7 +1239,8 @@ class _LeyendaChips extends StatelessWidget {
           onPressed: () => showModalBottomSheet(
             context: context,
             backgroundColor: Colors.transparent,
-            builder: (_) => Padding(
+            // Desplazable: en pantallas bajas la leyenda no cabe completa
+            builder: (_) => SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: _LeyendaZonas(tablero: tablero),
             ),
@@ -1214,12 +1257,10 @@ class _LeyendaChips extends StatelessWidget {
     final tipo = zonas.first.tipo;
     final completas = zonas.where((z) => z.estaCompleta).length;
 
-    final lugares = tipo.puntuaciones.entries
-        .map((e) => '${e.key}º ${e.value}')
-        .join(' · ');
-
     return Tooltip(
-      message: '${nombreDeTipo(tipo)}: ${tipo.descripcion}\n$lugares',
+      message: '${nombreDeTipo(tipo)}: ${tipo.descripcion}\n'
+          'Puntos por zona: 1º ${tipo.puntuaciones[1] ?? 0} · '
+          '2º ${tipo.puntuaciones[2] ?? 0} · 3º ${tipo.puntuaciones[3] ?? 0}',
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
@@ -1241,7 +1282,7 @@ class _LeyendaChips extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 6),
-            _PuntosPorLugar(tipo: tipo, ganados: completas),
+            _PuntosZona(tipo: tipo),
             const SizedBox(width: 6),
             Text(
               '$completas/${zonas.length}',
@@ -1259,44 +1300,21 @@ class _LeyendaChips extends StatelessWidget {
   }
 }
 
-/// Puntos por lugar de un color, ej. "6 · 4 · 2". Los que ya se ganaron
-/// salen tachados y el siguiente a ganar va resaltado.
-class _PuntosPorLugar extends StatelessWidget {
+/// Puntos que da cada zona de un color al llenarla, ej. "+4".
+class _PuntosZona extends StatelessWidget {
   final Tipo tipo;
 
-  /// Cuántas zonas de este color ya se completaron.
-  final int ganados;
-
-  const _PuntosPorLugar({required this.tipo, required this.ganados});
+  const _PuntosZona({required this.tipo});
 
   @override
   Widget build(BuildContext context) {
-    final lugares = tipo.puntuaciones.keys.toList()..sort();
-
-    return Text.rich(
-      TextSpan(
-        children: [
-          for (var i = 0; i < lugares.length; i++) ...[
-            if (i > 0)
-              TextSpan(
-                text: ' · ',
-                style: TextStyle(color: Colors.grey.shade400),
-              ),
-            TextSpan(
-              text: '${tipo.puntuaciones[lugares[i]]}',
-              style: i < ganados
-                  ? TextStyle(
-                      color: Colors.grey.shade400,
-                      decoration: TextDecoration.lineThrough,
-                    )
-                  : i == ganados
-                  ? const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)
-                  : TextStyle(color: Colors.grey.shade600),
-            ),
-          ],
-        ],
+    return Text(
+      '+${tipo.puntuaciones[1] ?? 0}',
+      style: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w900,
+        color: _colorTexto,
       ),
-      style: const TextStyle(fontSize: 13, color: _colorTexto),
     );
   }
 }

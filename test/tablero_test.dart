@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:brilliant/tablero.dart';
 import 'package:brilliant/zona.dart';
 import 'package:brilliant/tipo.dart';
+import 'package:brilliant/nivel1.dart';
 
 void main() {
   group('Tablero 7x7 - Pruebas de Integración con Reglas de Zonas', () {
@@ -105,52 +106,150 @@ void main() {
       
     });
 
-    group('Puntuación por lugar dentro de cada color', () {
-      // 4 zonas rojas y 1 verde de una casilla cada una
+    group('Puntuación por zona', () {
+      // 3 zonas rojas y 2 verdes de una casilla cada una
       Tablero tableroDePrueba() => Tablero(
             zonas: {
-              for (final id in ['r1', 'r2', 'r3', 'r4'])
+              for (final id in ['r1', 'r2', 'r3'])
                 id: Zona(id: id, tipo: TipoRojo(), capacidad: 1),
-              'v1': Zona(id: 'v1', tipo: TipoVerde(), capacidad: 1),
+              for (final id in ['v1', 'v2'])
+                id: Zona(id: id, tipo: TipoVerde(), capacidad: 1),
             },
             mapeo: {
               const Coordenada(0, 0): 'r1',
               const Coordenada(0, 1): 'r2',
               const Coordenada(0, 2): 'r3',
-              const Coordenada(0, 3): 'r4',
               const Coordenada(1, 0): 'v1',
+              const Coordenada(1, 1): 'v2',
             },
           );
 
-      test('rojo: la 1ª zona da 6, la 2ª 4, la 3ª 2 y la 4ª ya nada', () {
+      test('dos zonas verdes dan 4 cada una (8 en total, no 4 + 3)', () {
         var t = tableroDePrueba();
 
-        t = t.agregarNumero(const Coordenada(0, 2), 1);
-        expect(t.lugarDe('r3'), 1);
-        expect(t.puntuacion, 6);
+        t = t.agregarNumero(const Coordenada(1, 0), 1);
+        expect(t.puntosDe('v1'), 4);
+        expect(t.puntuacion, 4);
 
-        t = t.agregarNumero(const Coordenada(0, 0), 1);
-        expect(t.lugarDe('r1'), 2);
-        expect(t.puntosDe('r1'), 4);
-        expect(t.puntuacion, 10);
-
-        t = t.agregarNumero(const Coordenada(0, 1), 1);
-        expect(t.puntosDe('r2'), 2);
-        expect(t.puntuacion, 12);
-
-        t = t.agregarNumero(const Coordenada(0, 3), 1);
-        expect(t.lugarDe('r4'), 4);
-        expect(t.puntosDe('r4'), 0);
-        expect(t.puntuacion, 12);
+        t = t.agregarNumero(const Coordenada(1, 1), 1);
+        expect(t.puntosDe('v2'), 4);
+        expect(t.puntuacion, 8);
       });
 
-      test('el lugar se cuenta por separado en cada color', () {
+      test('cada zona roja da 6 aunque ya haya otras rojas llenas', () {
         var t = tableroDePrueba();
-        t = t.agregarNumero(const Coordenada(0, 0), 1); // 1º rojo: 6
-        t = t.agregarNumero(const Coordenada(1, 0), 1); // 1º verde: 4
+        for (var c = 0; c < 3; c++) {
+          t = t.agregarNumero(Coordenada(0, c), 1);
+        }
 
-        expect(t.lugarDe('v1'), 1);
+        expect(t.puntosDe('r1'), 6);
+        expect(t.puntosDe('r2'), 6);
+        expect(t.puntosDe('r3'), 6);
+        expect(t.puntuacion, 18);
+      });
+
+      test('tablero de juego: la zona amarilla solo puntúa al llenar sus 5 casillas', () {
+        var t = construirTableroNivel1();
+        final amarillas = [
+          const Coordenada(0, 0),
+          const Coordenada(0, 6),
+          const Coordenada(3, 3),
+          const Coordenada(6, 0),
+          const Coordenada(6, 6),
+        ];
+
+        for (var i = 0; i < 4; i++) {
+          t = t.agregarNumero(amarillas[i], i + 1);
+        }
+        expect(t.puntuacion, 0);
+
+        // Las amarillas no pueden repetir número entre ellas
+        expect(identical(t.agregarNumero(amarillas[4], 1), t), isTrue);
+
+        t = t.agregarNumero(amarillas[4], 5);
+        expect(t.zonas['am']!.estaCompleta, isTrue);
+        expect(t.puntuacion, 8);
+      });
+
+      test('zonas de distinto color suman sus puntos', () {
+        var t = tableroDePrueba();
+        t = t.agregarNumero(const Coordenada(0, 0), 1); // rojo: 6
+        t = t.agregarNumero(const Coordenada(1, 0), 1); // verde: 4
+
         expect(t.puntuacion, 10);
+      });
+    });
+
+    group('Vecinos y casillas', () {
+      test('una esquina tiene 2 vecinos', () {
+        expect(
+          tablero.vecinos(const Coordenada(0, 0)).toSet(),
+          {const Coordenada(1, 0), const Coordenada(0, 1)},
+        );
+      });
+
+      test('un borde tiene 3 vecinos', () {
+        expect(tablero.vecinos(const Coordenada(0, 3)), hasLength(3));
+      });
+
+      test('una casilla del centro tiene 4 vecinos (sin diagonales)', () {
+        expect(
+          tablero.vecinos(const Coordenada(3, 3)).toSet(),
+          {
+            const Coordenada(2, 3),
+            const Coordenada(4, 3),
+            const Coordenada(3, 2),
+            const Coordenada(3, 4),
+          },
+        );
+      });
+
+      test('zonaEn devuelve null fuera del tablero o en casillas sin zona', () {
+        expect(tablero.zonaEn(const Coordenada(-1, 0)), isNull);
+        expect(tablero.zonaEn(const Coordenada(6, 6)), isNull); // sin mapear
+        expect(tablero.zonaEn(const Coordenada(0, 0))?.id, 'z_amarilla');
+      });
+
+      test('agregar en una casilla sin zona no cambia el tablero', () {
+        expect(
+          identical(tablero.agregarNumero(const Coordenada(6, 6), 3), tablero),
+          isTrue,
+        );
+      });
+
+      test('agregarNumero no modifica el tablero original', () {
+        tablero.agregarNumero(const Coordenada(1, 0), 4);
+        expect(tablero.zonas['z_verde']!.valores, isEmpty);
+      });
+    });
+
+    group('Fin del tablero y orden de zonas', () {
+      test('ordenCompletadas guarda las zonas en el orden en que se llenan', () {
+        var t = tablero.agregarNumero(const Coordenada(1, 0), 1); // verde 1/2
+        expect(t.ordenCompletadas, isEmpty);
+
+        t = t.agregarNumero(const Coordenada(4, 0), 1); // roja 1/2
+        t = t.agregarNumero(const Coordenada(4, 0), 2); // roja completa
+        t = t.agregarNumero(const Coordenada(1, 0), 2); // verde completa
+        expect(t.ordenCompletadas, ['z_roja', 'z_verde']);
+      });
+
+      test('estaCompleto solo es true cuando todas las zonas están llenas', () {
+        var t = Tablero(
+          zonas: {'v': Zona(id: 'v', tipo: TipoVerde(), capacidad: 2)},
+          mapeo: {const Coordenada(0, 0): 'v'},
+        );
+        expect(t.estaCompleto, isFalse);
+        t = t.agregarNumero(const Coordenada(0, 0), 1);
+        expect(t.estaCompleto, isFalse);
+        t = t.agregarNumero(const Coordenada(0, 0), 2);
+        expect(t.estaCompleto, isTrue);
+      });
+
+      test('una zona incompleta no da puntos', () {
+        final t = tablero.agregarNumero(const Coordenada(1, 0), 1);
+        expect(t.puntosDe('z_verde'), 0);
+        expect(t.puntuacion, 0);
       });
     });
   });

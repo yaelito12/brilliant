@@ -65,7 +65,7 @@ class PartidaBloc extends Bloc<PartidaEvent, PartidaState> {
           ? '$prefijo No hay jugadas posibles, pulsa Siguiente.'
           : esDoble
               ? '$prefijo Toca un ${dados[0]} del tablero como ancla.'
-              : '$prefijo Toca el dado que quieres usar como ancla.',
+              : '$prefijo Toca un dado, o un ${dados[0]} o un ${dados[1]} del tablero, como ancla.',
     );
   }
 
@@ -89,11 +89,15 @@ class PartidaBloc extends Bloc<PartidaEvent, PartidaState> {
     ));
   }
 
+  /// Se puede tocar directamente en el tablero cualquier número que haya
+  /// salido en los dados (sin elegir antes el dado): ese dado pasa a ser
+  /// el ancla y el otro, el número a colocar.
   void _alSeleccionarAncla(AnclaSeleccionada event, Emitter<PartidaState> emit) {
-    final valorAncla = state.valorAncla;
+    final dados = state.dados;
+    final valorCasilla = state.celdas[event.coordenada];
     if (state.numeroColocado ||
-        valorAncla == null ||
-        state.celdas[event.coordenada] != valorAncla ||
+        dados == null ||
+        valorCasilla == null ||
         !state.anclasPosibles.contains(event.coordenada)) {
       return;
     }
@@ -102,13 +106,15 @@ class PartidaBloc extends Bloc<PartidaEvent, PartidaState> {
       emit(state.copyWith(
         ancla: () => null,
         destinosPosibles: const {},
-        mensaje: 'Toca un $valorAncla del tablero como ancla.',
+        mensaje: 'Toca un ${state.valorAncla} del tablero como ancla.',
       ));
       return;
     }
 
-    final numero = state.numeroAColocar!;
+    final numero = _otroDado(dados, valorCasilla);
     emit(state.copyWith(
+      valorAncla: () => valorCasilla,
+      numeroAColocar: () => numero,
       ancla: () => event.coordenada,
       destinosPosibles:
           _destinos(state.tablero!, state.celdas, event.coordenada, numero),
