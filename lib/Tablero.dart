@@ -29,11 +29,16 @@ class Tablero {
   /// Mapeo de qué coordenada pertenece a qué ID de Zona.
   final Map<Coordenada, String> mapeo;
 
+  /// IDs de las zonas en el orden en que se fueron completando.
+  /// Define el lugar (1º, 2º, 3º) de cada zona dentro de su color.
+  final List<String> ordenCompletadas;
+
   const Tablero({
     this.filas = 7,
     this.columnas = 7,
     required this.zonas,
     required this.mapeo,
+    this.ordenCompletadas = const [],
   });
 
   /// Verifica si una coordenada está dentro de los límites de 7x7.
@@ -53,6 +58,42 @@ class Tablero {
   /// Retorna true si todas las zonas han alcanzado su capacidad[cite: 6].
   bool get estaCompleto {
     return zonas.values.every((zona) => zona.estaCompleta);
+  }
+
+  /// Lugar (1, 2, 3...) en que se completó la zona [zonaId] entre las
+  /// zonas de su mismo color, o null si aún no está completa.
+  int? lugarDe(String zonaId) {
+    final indice = ordenCompletadas.indexOf(zonaId);
+    if (indice < 0) return null;
+    final tipo = zonas[zonaId]!.tipo.runtimeType;
+    final anteriores = ordenCompletadas
+        .take(indice)
+        .where((id) => zonas[id]!.tipo.runtimeType == tipo)
+        .length;
+    return anteriores + 1;
+  }
+
+  /// Puntos de la zona [zonaId] según el lugar en que se completó
+  /// dentro de su color (ej. rojo: 1º = 6, 2º = 4, 3º = 2).
+  int puntosDe(String zonaId) {
+    final lugar = lugarDe(zonaId);
+    if (lugar == null) return 0;
+    return zonas[zonaId]!.puntuacion(lugar: lugar);
+  }
+
+  /// Puntuación total: suma de los puntos de cada zona completa.
+  int get puntuacion {
+    return ordenCompletadas.fold(0, (total, id) => total + puntosDe(id));
+  }
+
+  /// Casillas vecinas (arriba, abajo, izquierda, derecha) dentro del tablero.
+  List<Coordenada> vecinos(Coordenada c) {
+    return [
+      Coordenada(c.fila - 1, c.columna),
+      Coordenada(c.fila + 1, c.columna),
+      Coordenada(c.fila, c.columna - 1),
+      Coordenada(c.fila, c.columna + 1),
+    ].where(esCoordenadaValida).toList();
   }
 
   /// Intenta agregar un número en una coordenada.
@@ -75,6 +116,9 @@ class Tablero {
         columnas: columnas,
         zonas: nuevasZonas,
         mapeo: mapeo,
+        ordenCompletadas: zonaActualizada.estaCompleta
+            ? [...ordenCompletadas, zonaActualizada.id]
+            : ordenCompletadas,
       );
     }
     

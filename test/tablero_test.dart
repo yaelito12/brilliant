@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import '../lib/tablero.dart';
-import '../lib/zona.dart';
-import '../lib/tipo.dart';
+import 'package:brilliant/tablero.dart';
+import 'package:brilliant/zona.dart';
+import 'package:brilliant/tipo.dart';
 
 void main() {
   group('Tablero 7x7 - Pruebas de Integración con Reglas de Zonas', () {
@@ -103,6 +103,55 @@ void main() {
         expect(identical(t2, t3), isTrue); // Movimiento ignorado
       });
       
+    });
+
+    group('Puntuación por lugar dentro de cada color', () {
+      // 4 zonas rojas y 1 verde de una casilla cada una
+      Tablero tableroDePrueba() => Tablero(
+            zonas: {
+              for (final id in ['r1', 'r2', 'r3', 'r4'])
+                id: Zona(id: id, tipo: TipoRojo(), capacidad: 1),
+              'v1': Zona(id: 'v1', tipo: TipoVerde(), capacidad: 1),
+            },
+            mapeo: {
+              const Coordenada(0, 0): 'r1',
+              const Coordenada(0, 1): 'r2',
+              const Coordenada(0, 2): 'r3',
+              const Coordenada(0, 3): 'r4',
+              const Coordenada(1, 0): 'v1',
+            },
+          );
+
+      test('rojo: la 1ª zona da 6, la 2ª 4, la 3ª 2 y la 4ª ya nada', () {
+        var t = tableroDePrueba();
+
+        t = t.agregarNumero(const Coordenada(0, 2), 1);
+        expect(t.lugarDe('r3'), 1);
+        expect(t.puntuacion, 6);
+
+        t = t.agregarNumero(const Coordenada(0, 0), 1);
+        expect(t.lugarDe('r1'), 2);
+        expect(t.puntosDe('r1'), 4);
+        expect(t.puntuacion, 10);
+
+        t = t.agregarNumero(const Coordenada(0, 1), 1);
+        expect(t.puntosDe('r2'), 2);
+        expect(t.puntuacion, 12);
+
+        t = t.agregarNumero(const Coordenada(0, 3), 1);
+        expect(t.lugarDe('r4'), 4);
+        expect(t.puntosDe('r4'), 0);
+        expect(t.puntuacion, 12);
+      });
+
+      test('el lugar se cuenta por separado en cada color', () {
+        var t = tableroDePrueba();
+        t = t.agregarNumero(const Coordenada(0, 0), 1); // 1º rojo: 6
+        t = t.agregarNumero(const Coordenada(1, 0), 1); // 1º verde: 4
+
+        expect(t.lugarDe('v1'), 1);
+        expect(t.puntuacion, 10);
+      });
     });
   });
 }

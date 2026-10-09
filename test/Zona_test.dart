@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import '../lib/zona.dart';
-import '../lib/tipo.dart';
+import 'package:brilliant/zona.dart';
+import 'package:brilliant/tipo.dart';
 
 void main() {
   group('Zona - estaCompleta', () {

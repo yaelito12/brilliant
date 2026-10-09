@@ -29,6 +29,14 @@ class Zona {
     return tipo.esPosibleAgregar(valores, numero);
   }
 
+  /// Puntos que otorga la zona. Solo puntúa si está completa, y vale
+  /// lo que indique [Tipo.puntuaciones] para el [lugar] en que se
+  /// completó (1 = primero en completarla).
+  int puntuacion({int lugar = 1}) {
+    if (!estaCompleta) return 0;
+    return tipo.puntuaciones[lugar] ?? 0;
+  }
+
   /// Retorna una nueva Zona con [numero] agregado al final de
   /// [valores]. No valida la regla del [tipo] ni la capacidad;
   /// usa [puedeAgregar] antes de llamar a este método para asegurar
