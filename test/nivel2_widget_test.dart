@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:brilliant/nivel2.dart';
 import 'package:brilliant/tablero.dart';
+import 'package:brilliant/menu_mapas.dart';
 import 'package:brilliant/tablero_ui.dart';
 import 'package:brilliant/tipo.dart';
 
@@ -28,11 +29,10 @@ Future<void> _ponerIniciales(WidgetTester tester) async {
 
 void main() {
   group('Elegir el Nivel 2', () {
-    testWidgets('aparece en el selector con su miniatura', (tester) async {
-      await abrirApp(tester);
-      await abrirSelector(tester);
+    testWidgets('aparece en el menú con su miniatura', (tester) async {
+      await abrirMenu(tester);
 
-      expect(enDialogo(find.text('Nivel 2')), findsOneWidget);
+      expect(enMenu(find.text('Nivel 2')), findsOneWidget);
       final grises = find.descendant(
         of: find.byType(MiniMapa).at(1),
         matching: find.byWidgetPredicate((w) {

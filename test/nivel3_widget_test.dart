@@ -27,11 +27,10 @@ Future<void> _ponerIniciales(WidgetTester tester) async {
 
 void main() {
   group('Elegir el Nivel 3', () {
-    testWidgets('aparece en el selector', (tester) async {
-      await abrirApp(tester);
-      await abrirSelector(tester);
+    testWidgets('aparece en el menú', (tester) async {
+      await abrirMenu(tester);
 
-      expect(enDialogo(find.text('Nivel 3')), findsOneWidget);
+      expect(enMenu(find.text('Nivel 3')), findsOneWidget);
     });
 
     testWidgets('al elegirlo la barra muestra "Nivel 3"', (tester) async {

@@ -8,6 +8,7 @@ import 'package:brilliant/tablero.dart';
 import 'package:brilliant/bloc/juego_bloc.dart';
 import 'package:brilliant/bloc/juego_state.dart';
 import 'package:brilliant/bloc/partida_bloc.dart';
+import 'package:brilliant/menu_mapas.dart';
 import 'package:brilliant/nivel1.dart';
 import 'package:brilliant/tablero_ui.dart';
 import 'package:brilliant/tipo.dart';
@@ -74,7 +75,7 @@ void main() {
   });
 
   group('MyApp', () {
-    testWidgets('es una MaterialApp con tema teal y sin banner debug', (
+    testWidgets('es una MaterialApp que abre en el menú de mapas', (
       tester,
     ) async {
       await abrirApp(tester);
@@ -82,7 +83,7 @@ void main() {
       final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
       expect(app.title, 'Brilliant');
       expect(app.debugShowCheckedModeBanner, isFalse);
-      expect(app.home, isA<TableroPage>());
+      expect(app.home, isA<MenuMapasPage>());
       expect(find.byType(TableroPage), findsOneWidget);
     });
   });

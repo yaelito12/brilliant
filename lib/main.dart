@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'tablero_ui.dart';
+import 'menu_mapas.dart';
 
 void main() {
   runApp(const MyApp());
@@ -17,7 +17,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
       ),
-      home: const TableroPage(),
+      home: const MenuMapasPage(),
     );
   }
 }

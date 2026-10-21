@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:brilliant/nivel4.dart';
 import 'package:brilliant/tablero.dart';
+import 'package:brilliant/menu_mapas.dart';
 import 'package:brilliant/tablero_ui.dart';
 import 'package:brilliant/tipo.dart';
 
@@ -54,13 +55,12 @@ Set<int> valoresBloqueados(WidgetTester tester) {
 
 void main() {
   group('Elegir el Nivel 4', () {
-    testWidgets('el selector muestra los 4 mapas oficiales', (tester) async {
-      await abrirApp(tester);
-      await abrirSelector(tester);
+    testWidgets('el menú muestra los 4 mapas oficiales', (tester) async {
+      await abrirMenu(tester);
 
       expect(find.byType(MiniMapa), findsNWidgets(4));
       for (var n = 1; n <= 4; n++) {
-        expect(enDialogo(find.text('Nivel $n')), findsOneWidget);
+        expect(enMenu(find.text('Nivel $n')), findsOneWidget);
       }
     });
 

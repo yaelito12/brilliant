@@ -7,6 +7,15 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:brilliant/bloc/partida_bloc.dart';
 import 'package:brilliant/bloc/partida_event.dart';
 
+/// Abre la app, elige el Nivel 1 en el menú y pulsa "Jugar".
+Future<void> _abrirJuego(WidgetTester tester) async {
+  await tester.pumpWidget(const MyApp());
+  await tester.tap(find.text('Nivel 1'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Jugar Nivel 1'));
+  await tester.pumpAndSettle();
+}
+
 /// Toca la casilla (fila, columna) del tablero 7x7.
 Future<void> _tocarCelda(WidgetTester tester, int fila, int columna) async {
   final grid = tester.getRect(find.byType(GridView));
@@ -41,7 +50,7 @@ void main() {
       testWidgets('arranca esperando los valores iniciales', (
         WidgetTester tester,
       ) async {
-        await tester.pumpWidget(const MyApp());
+        await _abrirJuego(tester);
 
         expect(find.text('Faltan números'), findsOneWidget);
         expect(find.text('Reglas'), findsOneWidget);
@@ -59,7 +68,7 @@ void main() {
           tester.view.devicePixelRatio = 1;
           addTearDown(tester.view.reset);
 
-          await tester.pumpWidget(const MyApp());
+          await _abrirJuego(tester);
           await _comenzarPartida(tester);
 
           expect(find.text('Turno 1'), findsOneWidget);
@@ -85,7 +94,7 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
 
-        await tester.pumpWidget(const MyApp());
+        await _abrirJuego(tester);
         await _comenzarPartida(tester);
         final bloc = BlocProvider.of<PartidaBloc>(
           tester.element(find.byType(GridView).first),
@@ -141,7 +150,7 @@ void main() {
       }
 
       testWidgets('cuenta las casillas que faltan', (tester) async {
-        await tester.pumpWidget(const MyApp());
+        await _abrirJuego(tester);
         expect(find.textContaining('Faltan 6.'), findsOneWidget);
 
         await ponerNumero(tester, 0, 1);
@@ -149,7 +158,7 @@ void main() {
       });
 
       testWidgets('no deja repetir un número ya usado', (tester) async {
-        await tester.pumpWidget(const MyApp());
+        await _abrirJuego(tester);
         await ponerNumero(tester, 0, 1);
 
         // En otra casilla, el 1 está ocupado: la hoja no se cierra
@@ -159,7 +168,7 @@ void main() {
       });
 
       testWidgets('se puede borrar un número puesto', (tester) async {
-        await tester.pumpWidget(const MyApp());
+        await _abrirJuego(tester);
         await ponerNumero(tester, 0, 1);
 
         final c = casillasInicialesNivel1.first;
@@ -171,7 +180,7 @@ void main() {
       });
 
       testWidgets('solo se puede comenzar con los 6 números', (tester) async {
-        await tester.pumpWidget(const MyApp());
+        await _abrirJuego(tester);
         for (var i = 0; i < 5; i++) {
           await ponerNumero(tester, i, i + 1);
         }
@@ -188,7 +197,7 @@ void main() {
         tester.view.physicalSize = const Size(1280, 800);
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
-        await tester.pumpWidget(const MyApp());
+        await _abrirJuego(tester);
         await _comenzarPartida(tester);
         await tester.tap(find.text('Tirar dados'));
         await tester.pumpAndSettle();
@@ -229,7 +238,7 @@ void main() {
       testWidgets('el botón Reglas muestra los puntos de cada color', (
         tester,
       ) async {
-        await tester.pumpWidget(const MyApp());
+        await _abrirJuego(tester);
         await tester.tap(find.text('Reglas'));
         await tester.pumpAndSettle();
 
@@ -242,7 +251,7 @@ void main() {
       testWidgets('muestra los puntos para el 1º, 2º y 3º en llenar', (
         tester,
       ) async {
-        await tester.pumpWidget(const MyApp());
+        await _abrirJuego(tester);
         await tester.tap(find.text('Reglas'));
         await tester.pumpAndSettle();
 

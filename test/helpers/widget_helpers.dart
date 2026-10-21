@@ -7,9 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:brilliant/bloc/partida_bloc.dart';
 import 'package:brilliant/bloc/partida_state.dart';
 import 'package:brilliant/main.dart';
+import 'package:brilliant/menu_mapas.dart';
 import 'package:brilliant/nivel1.dart';
 import 'package:brilliant/tablero.dart';
-import 'package:brilliant/tablero_ui.dart';
 
 /// Color de texto/contornos que usa la interfaz (_colorTexto en tablero_ui).
 const colorTexto = Color(0xFF1B3B4D);
@@ -24,13 +24,15 @@ void usarPantalla(WidgetTester tester, Size tamano) {
   addTearDown(tester.view.reset);
 }
 
-/// Abre la app completa en la pantalla indicada.
+/// Abre la app completa, elige el Nivel 1 en el menú y pulsa "Jugar".
 Future<void> abrirApp(
   WidgetTester tester, {
   Size tamano = pantallaAncha,
 }) async {
   usarPantalla(tester, tamano);
   await tester.pumpWidget(const MyApp());
+  await elegirMapa(tester, 'Nivel 1');
+  await jugar(tester);
 }
 
 /// El GridView del tablero (el primero del árbol; los dados tienen otro).
@@ -204,30 +206,47 @@ Finder celdasDeColor(Color color) => find.descendant(
       }),
     );
 
-/// Botón de mapa de la barra superior.
-Finder botonMapa() => find.descendant(
-      of: find.byType(AppBar),
-      matching: find.byIcon(Icons.map),
+/// Busca [f] dentro del menú de mapas.
+Finder enMenu(Finder f) =>
+    find.descendant(of: find.byType(MenuMapasPage), matching: f);
+
+/// Botón "Jugar" del menú (su texto cambia a "Jugar Nivel N").
+Finder botonJugar() => find.ancestor(
+      of: enMenu(find.textContaining('Jugar')),
+      matching: find.byWidgetPredicate((w) => w is ElevatedButton),
     );
 
-Finder enDialogo(Finder f) =>
-    find.descendant(of: find.byType(AlertDialog), matching: f);
-
-Future<void> abrirSelector(WidgetTester tester) async {
-  await tester.tap(botonMapa());
-  await tester.pumpAndSettle();
+/// Abre el menú de mapas; si se dan [dados], las tiradas de la partida
+/// salen en ese orden.
+Future<void> abrirMenu(
+  WidgetTester tester, {
+  List<int>? dados,
+  Size tamano = pantallaAncha,
+}) async {
+  usarPantalla(tester, tamano);
+  await tester.pumpWidget(MaterialApp(
+    home: MenuMapasPage(random: dados == null ? null : DadosFijos(dados)),
+  ));
 }
 
-/// Abre el selector y toca el mapa con nombre [nombre] (ej. "Nivel 2").
+/// Toca en el menú la tarjeta del mapa [nombre] (ej. "Nivel 2").
 Future<void> elegirMapa(WidgetTester tester, String nombre) async {
-  await abrirSelector(tester);
-  await tester.ensureVisible(enDialogo(find.text(nombre)));
+  final tarjeta = enMenu(find.text(nombre));
+  await tester.ensureVisible(tarjeta);
   await tester.pumpAndSettle();
-  await tester.tap(enDialogo(find.text(nombre)));
+  await tester.tap(tarjeta);
   await tester.pumpAndSettle();
 }
 
-/// Texto del botón de mapa de la barra superior (ej. "Nivel 1").
+/// Pulsa "Jugar" en el menú y espera a que aparezca la partida.
+Future<void> jugar(WidgetTester tester) async {
+  await tester.ensureVisible(botonJugar());
+  await tester.pumpAndSettle();
+  await tester.tap(botonJugar());
+  await tester.pumpAndSettle();
+}
+
+/// Texto del nivel en la barra superior de la partida (ej. "Nivel 1").
 String nivelEnBarra(WidgetTester tester) {
   final textos = tester.widgetList<Text>(find.descendant(
     of: find.byType(AppBar),
@@ -236,17 +255,14 @@ String nivelEnBarra(WidgetTester tester) {
   return textos.single.data!;
 }
 
-/// Abre la pantalla con los mapas oficiales, elige [nombre] y, si se dan
-/// [dados], las tiradas salen en ese orden.
+/// Abre el menú, elige [nombre] y pulsa "Jugar".
 Future<void> abrirMapa(
   WidgetTester tester,
   String nombre, {
   List<int>? dados,
   Size tamano = pantallaAncha,
 }) async {
-  usarPantalla(tester, tamano);
-  await tester.pumpWidget(MaterialApp(
-    home: TableroPage(random: dados == null ? null : DadosFijos(dados)),
-  ));
+  await abrirMenu(tester, dados: dados, tamano: tamano);
   await elegirMapa(tester, nombre);
+  await jugar(tester);
 }
