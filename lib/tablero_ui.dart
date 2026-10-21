@@ -201,12 +201,24 @@ class _TableroViewState extends State<_TableroView> {
         .map((e) => e.value)
         .toSet();
 
+    // La zona también tiene que aceptar el número (ej. la naranja 4-6)
+    final zona = _tablero.zonaEn(coordenada)!;
+    final otrosEnLaZona = _valoresIniciales.entries
+        .where((e) => e.key != coordenada && _tablero.zonaEn(e.key)?.id == zona.id)
+        .map((e) => e.value)
+        .toList();
+    bool fueraDeRegla(int numero) =>
+        !zona.tipo.esPosibleAgregar(otrosEnLaZona, numero);
+    final zonaRestringe = List.generate(6, (i) => i + 1).any(fueraDeRegla);
+    bool bloqueado(int numero) =>
+        ocupadosPorOtros.contains(numero) || fueraDeRegla(numero);
+
     final focusNode = FocusNode();
     focusNode.requestFocus();
 
     void seleccionarNumero(int numero) {
-      // No permitir si está ocupado
-      if (ocupadosPorOtros.contains(numero)) return;
+      // No permitir si está ocupado o la zona no lo acepta
+      if (bloqueado(numero)) return;
       Navigator.pop(context);
       setState(() {
         _valoresIniciales[coordenada] = numero;
@@ -258,12 +270,24 @@ class _TableroViewState extends State<_TableroView> {
                   'Puedes presionar un número en tu teclado',
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
+                if (zonaRestringe) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Zona ${nombreDeTipo(zona.tipo).toLowerCase()}: '
+                    '${zona.tipo.descripcion.toLowerCase()}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange.shade800,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: List.generate(6, (i) {
                     final numero = i + 1;
-                    final estaOcupado = ocupadosPorOtros.contains(numero);
+                    final estaOcupado = bloqueado(numero);
                     final esSeleccionado = valorActual == numero;
 
                     return GestureDetector(
@@ -985,6 +1009,7 @@ Color colorDeTipo(Tipo tipo) {
   if (tipo is TipoAmarillo) return const Color(0xFFFFCA28);
   if (tipo is TipoMorado) return const Color(0xFFAB47BC);
   if (tipo is TipoGris) return const Color(0xFFCFD8DC);
+  if (tipo is TipoNaranja) return const Color(0xFFFFA726);
   return Colors.grey;
 }
 
@@ -995,6 +1020,7 @@ String nombreDeTipo(Tipo tipo) {
   if (tipo is TipoAmarillo) return 'Amarillo';
   if (tipo is TipoMorado) return 'Morado';
   if (tipo is TipoGris) return 'Gris';
+  if (tipo is TipoNaranja) return 'Naranja ${tipo.minimo}-${tipo.maximo}';
   return '?';
 }
 

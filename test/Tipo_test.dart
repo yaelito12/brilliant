@@ -123,6 +123,58 @@ void main() {
     });
   });
 
+  group('TipoNaranjaBajo (1-3)', () {
+    final tipo = TipoNaranjaBajo();
+
+    test('acepta del 1 al 3, aunque se repitan', () {
+      for (var n = 1; n <= 3; n++) {
+        expect(tipo.esPosibleAgregar([], n), isTrue, reason: '$n');
+      }
+      expect(tipo.esPosibleAgregar([2, 2], 2), isTrue);
+    });
+
+    test('rechaza del 4 al 6', () {
+      for (var n = 4; n <= 6; n++) {
+        expect(tipo.esPosibleAgregar([], n), isFalse, reason: '$n');
+      }
+    });
+
+    test('describe su rango', () {
+      expect(tipo.minimo, 1);
+      expect(tipo.maximo, 3);
+      expect(tipo.descripcion, 'Solo números del 1 al 3');
+    });
+
+    test('puntuaciones por defecto son 6, 4 y 3', () {
+      expect(tipo.puntuaciones, {1: 6, 2: 4, 3: 3});
+    });
+  });
+
+  group('TipoNaranjaAlto (4-6)', () {
+    final tipo = TipoNaranjaAlto();
+
+    test('acepta del 4 al 6, aunque se repitan', () {
+      for (var n = 4; n <= 6; n++) {
+        expect(tipo.esPosibleAgregar([], n), isTrue, reason: '$n');
+      }
+      expect(tipo.esPosibleAgregar([5, 5], 5), isTrue);
+    });
+
+    test('rechaza del 1 al 3', () {
+      for (var n = 1; n <= 3; n++) {
+        expect(tipo.esPosibleAgregar([], n), isFalse, reason: '$n');
+      }
+    });
+
+    test('describe su rango', () {
+      expect(tipo.descripcion, 'Solo números del 4 al 6');
+    });
+
+    test('las dos naranjas comparten color', () {
+      expect(tipo.color, TipoNaranjaBajo().color);
+    });
+  });
+
   group('Puntos por nivel', () {
     test('puntos() arma el mapa del 1º, 2º y 3º lugar', () {
       expect(puntos(6, 4, 2), {1: 6, 2: 4, 3: 2});

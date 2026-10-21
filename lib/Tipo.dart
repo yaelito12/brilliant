@@ -162,3 +162,52 @@ class TipoGris extends Tipo {
         3: 1,
       };
 }
+
+/// Zona naranja (aparece en el nivel 4): solo acepta números dentro de
+/// un rango, repetidos o no.
+abstract class TipoNaranja extends Tipo {
+  TipoNaranja([super.puntosNivel]);
+
+  int get minimo;
+  int get maximo;
+
+  @override
+  Color get color => const Color(0xFFFF9800);
+
+  @override
+  String get descripcion => 'Solo números del $minimo al $maximo';
+
+  @override
+  bool esPosibleAgregar(List<int> actuales, int posible) {
+    return posible >= minimo && posible <= maximo;
+  }
+
+  @override
+  Map<int, int> get puntuacionesBase => {
+        1: 6,
+        2: 4,
+        3: 3,
+      };
+}
+
+/// Naranja "1-3": solo números del 1 al 3.
+class TipoNaranjaBajo extends TipoNaranja {
+  TipoNaranjaBajo([super.puntosNivel]);
+
+  @override
+  int get minimo => 1;
+
+  @override
+  int get maximo => 3;
+}
+
+/// Naranja "4-6": solo números del 4 al 6.
+class TipoNaranjaAlto extends TipoNaranja {
+  TipoNaranjaAlto([super.puntosNivel]);
+
+  @override
+  int get minimo => 4;
+
+  @override
+  int get maximo => 6;
+}
