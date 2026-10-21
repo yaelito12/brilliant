@@ -1,6 +1,13 @@
+import 'nivel.dart';
 import 'tablero.dart';
 import 'zona.dart';
 import 'tipo.dart';
+
+final Nivel nivel1 = Nivel(
+  numero: 1,
+  construirTablero: construirTableroNivel1,
+  casillasIniciales: casillasInicialesNivel1,
+);
 
 /// Las 6 casillas marcadas con X en el tablero del Nivel 1.
 /// El jugador debe rellenarlas con números del 1 al 6 sin repetir.

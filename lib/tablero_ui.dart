@@ -7,7 +7,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'tablero.dart';
 import 'tipo.dart';
 import 'zona.dart';
-import 'nivel1.dart';
+import 'nivel.dart';
+import 'niveles.dart';
 import 'bloc/juego_bloc.dart';
 import 'bloc/juego_event.dart';
 import 'bloc/juego_state.dart';
@@ -15,23 +16,50 @@ import 'bloc/partida_bloc.dart';
 import 'bloc/partida_event.dart';
 import 'bloc/partida_state.dart';
 
-class TableroPage extends StatelessWidget {
-  const TableroPage({super.key});
+class TableroPage extends StatefulWidget {
+  /// Mapas que se pueden elegir; por defecto, los oficiales.
+  final List<Nivel>? niveles;
+
+  const TableroPage({super.key, this.niveles});
+
+  @override
+  State<TableroPage> createState() => _TableroPageState();
+}
+
+class _TableroPageState extends State<TableroPage> {
+  List<Nivel> get _niveles => widget.niveles ?? nivelesOficiales;
+
+  late Nivel _nivel = _niveles.first;
 
   @override
   Widget build(BuildContext context) {
+    // La llave hace que al cambiar de mapa se creen blocs nuevos:
+    // la partida empieza de cero en el mapa elegido
     return MultiBlocProvider(
+      key: ValueKey(_nivel),
       providers: [
         BlocProvider(create: (_) => JuegoBloc()),
         BlocProvider(create: (_) => PartidaBloc()),
       ],
-      child: const _TableroView(),
+      child: _TableroView(
+        nivel: _nivel,
+        niveles: _niveles,
+        onCambiarNivel: (nivel) => setState(() => _nivel = nivel),
+      ),
     );
   }
 }
 
 class _TableroView extends StatefulWidget {
-  const _TableroView();
+  final Nivel nivel;
+  final List<Nivel> niveles;
+  final ValueChanged<Nivel> onCambiarNivel;
+
+  const _TableroView({
+    required this.nivel,
+    required this.niveles,
+    required this.onCambiarNivel,
+  });
 
   @override
   State<_TableroView> createState() => _TableroViewState();
@@ -46,13 +74,61 @@ class _TableroViewState extends State<_TableroView> {
   @override
   void initState() {
     super.initState();
-    _tablero = construirTableroNivel1();
+    _tablero = widget.nivel.construirTablero();
   }
 
+  Set<Coordenada> get _casillasIniciales => widget.nivel.casillasIniciales;
+
   bool get _todasLasCasillasInicalesLlenas {
-    return casillasInicialesNivel1.every(
+    return _casillasIniciales.every(
       (c) => _valoresIniciales.containsKey(c),
     );
+  }
+
+  /// Abre el selector de mapas. Si ya hay números puestos pide
+  /// confirmación, porque al cambiar se pierde la partida.
+  Future<void> _elegirMapa(BuildContext context) async {
+    final elegido = await showDialog<Nivel>(
+      context: context,
+      builder: (_) => _SelectorMapa(
+        niveles: widget.niveles,
+        actual: widget.nivel,
+      ),
+    );
+    if (elegido == null || elegido == widget.nivel || !context.mounted) {
+      return;
+    }
+
+    final hayProgreso = context.read<PartidaBloc>().state.iniciada ||
+        _valoresIniciales.isNotEmpty;
+    if (hayProgreso) {
+      final confirmado = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          icon: Icon(Icons.map, color: Colors.teal.shade700, size: 40),
+          title: Text('¿Cambiar al ${elegido.nombre}?'),
+          content: const Text(
+            'Se perderán los números puestos en el mapa actual.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.teal.shade700,
+              ),
+              child: const Text('Sí, cambiar'),
+            ),
+          ],
+        ),
+      );
+      if (confirmado != true) return;
+    }
+
+    widget.onCambiarNivel(elegido);
   }
 
   void _alTocarCelda(BuildContext context, Coordenada coordenada) {
@@ -68,7 +144,7 @@ class _TableroViewState extends State<_TableroView> {
     }
 
     // Antes de empezar la partida se pueden corregir los valores iniciales
-    if (!casillasInicialesNivel1.contains(coordenada)) return;
+    if (!_casillasIniciales.contains(coordenada)) return;
     _mostrarSelectorNumero(context, coordenada);
   }
 
@@ -313,6 +389,20 @@ class _TableroViewState extends State<_TableroView> {
                   ),
                   backgroundColor: Colors.teal.shade700,
                   foregroundColor: Colors.white,
+                  actions: [
+                    Tooltip(
+                      message: 'Elegir mapa',
+                      child: TextButton.icon(
+                        onPressed: () => _elegirMapa(context),
+                        icon: const Icon(Icons.map),
+                        label: Text(widget.nivel.nombre),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                 ),
                 // Los dados y el botón van pegados al tablero para no
                 // tener que cruzar la pantalla en cada jugada
@@ -548,7 +638,7 @@ class _TableroViewState extends State<_TableroView> {
   }
 
   Widget _buildInfoPreparacion() {
-    final pendientes = casillasInicialesNivel1
+    final pendientes = _casillasIniciales
         .where((c) => !_valoresIniciales.containsKey(c))
         .length;
 
@@ -700,7 +790,7 @@ class _TableroViewState extends State<_TableroView> {
       return Container(color: Colors.transparent);
     }
 
-    final esInicial = casillasInicialesNivel1.contains(coordenada);
+    final esInicial = _casillasIniciales.contains(coordenada);
     final valor = partida.iniciada
         ? partida.celdas[coordenada]
         : _valoresIniciales[coordenada];
@@ -1408,6 +1498,144 @@ class _DadoAnimadoState extends State<_DadoAnimado>
           ),
         );
       },
+    );
+  }
+}
+
+/// Diálogo para elegir uno de los mapas; devuelve el [Nivel] tocado.
+class _SelectorMapa extends StatelessWidget {
+  final List<Nivel> niveles;
+  final Nivel actual;
+
+  const _SelectorMapa({required this.niveles, required this.actual});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Elige un mapa'),
+      content: SingleChildScrollView(
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final nivel in niveles)
+              _TarjetaMapa(
+                nivel: nivel,
+                elegido: nivel == actual,
+                onTap: () => Navigator.pop(context, nivel),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cerrar'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Un mapa del selector: su nombre y el tablero en miniatura.
+/// El mapa que se está jugando lleva un borde verde azulado.
+class _TarjetaMapa extends StatelessWidget {
+  final Nivel nivel;
+  final bool elegido;
+  final VoidCallback onTap;
+
+  const _TarjetaMapa({
+    required this.nivel,
+    required this.elegido,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: elegido ? Colors.teal.shade700 : Colors.grey.shade300,
+            width: elegido ? 3 : 1,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            MiniMapa(nivel: nivel),
+            const SizedBox(height: 6),
+            Text(
+              nivel.nombre,
+              style: TextStyle(
+                fontWeight: elegido ? FontWeight.bold : FontWeight.w600,
+                color: _colorTexto,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Tablero de [nivel] en miniatura: cada casilla con el color de su zona y
+/// un punto blanco en las casillas iniciales.
+class MiniMapa extends StatelessWidget {
+  final Nivel nivel;
+
+  /// Lado de cada casilla.
+  final double lado;
+
+  const MiniMapa({super.key, required this.nivel, this.lado = 14});
+
+  @override
+  Widget build(BuildContext context) {
+    final tablero = nivel.construirTablero();
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var f = 0; f < tablero.filas; f++)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var c = 0; c < tablero.columnas; c++)
+                _buildCasilla(tablero, Coordenada(f, c)),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _buildCasilla(Tablero tablero, Coordenada coordenada) {
+    final zona = tablero.zonaEn(coordenada);
+
+    return Container(
+      width: lado,
+      height: lado,
+      margin: const EdgeInsets.all(1),
+      decoration: BoxDecoration(
+        color: zona == null ? Colors.transparent : colorDeTipo(zona.tipo),
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: nivel.casillasIniciales.contains(coordenada)
+          ? Center(
+              child: Container(
+                width: lado / 3,
+                height: lado / 3,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            )
+          : null,
     );
   }
 }
