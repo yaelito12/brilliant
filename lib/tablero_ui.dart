@@ -20,7 +20,10 @@ class TableroPage extends StatefulWidget {
   /// Mapas que se pueden elegir; por defecto, los oficiales.
   final List<Nivel>? niveles;
 
-  const TableroPage({super.key, this.niveles});
+  /// Generador de los dados (en los tests, para que salgan valores fijos).
+  final Random? random;
+
+  const TableroPage({super.key, this.niveles, this.random});
 
   @override
   State<TableroPage> createState() => _TableroPageState();
@@ -39,7 +42,7 @@ class _TableroPageState extends State<TableroPage> {
       key: ValueKey(_nivel),
       providers: [
         BlocProvider(create: (_) => JuegoBloc()),
-        BlocProvider(create: (_) => PartidaBloc()),
+        BlocProvider(create: (_) => PartidaBloc(random: widget.random)),
       ],
       child: _TableroView(
         nivel: _nivel,
@@ -981,6 +984,7 @@ Color colorDeTipo(Tipo tipo) {
   if (tipo is TipoRojo) return const Color(0xFFEF5350);
   if (tipo is TipoAmarillo) return const Color(0xFFFFCA28);
   if (tipo is TipoMorado) return const Color(0xFFAB47BC);
+  if (tipo is TipoGris) return const Color(0xFFCFD8DC);
   return Colors.grey;
 }
 
@@ -990,6 +994,7 @@ String nombreDeTipo(Tipo tipo) {
   if (tipo is TipoRojo) return 'Rojo';
   if (tipo is TipoAmarillo) return 'Amarillo';
   if (tipo is TipoMorado) return 'Morado';
+  if (tipo is TipoGris) return 'Gris';
   return '?';
 }
 

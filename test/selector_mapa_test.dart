@@ -36,47 +36,6 @@ Future<void> abrirConDosMapas(WidgetTester tester) async {
   ));
 }
 
-Finder botonMapa() => find.descendant(
-      of: find.byType(AppBar),
-      matching: find.byIcon(Icons.map),
-    );
-
-Finder enDialogo(Finder f) =>
-    find.descendant(of: find.byType(AlertDialog), matching: f);
-
-Future<void> abrirSelector(WidgetTester tester) async {
-  await tester.tap(botonMapa());
-  await tester.pumpAndSettle();
-}
-
-/// Abre el selector y toca el mapa con nombre [nombre].
-Future<void> elegirMapa(WidgetTester tester, String nombre) async {
-  await abrirSelector(tester);
-  await tester.tap(enDialogo(find.text(nombre)));
-  await tester.pumpAndSettle();
-}
-
-/// Texto del botón de mapa de la barra superior (ej. "Nivel 1").
-String nivelEnBarra(WidgetTester tester) {
-  final textos = tester.widgetList<Text>(find.descendant(
-    of: find.byType(AppBar),
-    matching: find.textContaining('Nivel'),
-  ));
-  return textos.single.data!;
-}
-
-/// Casillas pintadas de [color] dentro del tablero principal.
-Finder celdasDeColor(Color color) => find.descendant(
-      of: tablero(),
-      matching: find.byWidgetPredicate((w) {
-        if (w is! Container) return false;
-        final d = w.decoration;
-        if (d is! BoxDecoration) return false;
-        final g = d.gradient;
-        return g is LinearGradient && g.colors[1] == color;
-      }),
-    );
-
 /// Puntos blancos que marcan las casillas iniciales en una miniatura.
 Finder puntosIniciales(Finder miniatura) => find.descendant(
       of: miniatura,

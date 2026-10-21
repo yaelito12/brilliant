@@ -102,4 +102,47 @@ void main() {
       expect(tipo.puntuaciones, {1: 8, 2: 6, 3: 4});
     });
   });
+
+  group('TipoGris', () {
+    final tipo = TipoGris();
+
+    test('bloque vacío siempre acepta el primer número', () {
+      expect(tipo.esPosibleAgregar([], 2), isTrue);
+    });
+
+    test('acepta el número si es igual a los ya puestos', () {
+      expect(tipo.esPosibleAgregar([2], 2), isTrue);
+    });
+
+    test('rechaza un número distinto a los ya puestos', () {
+      expect(tipo.esPosibleAgregar([2], 5), isFalse);
+    });
+
+    test('puntuaciones por defecto son 3, 2 y 1', () {
+      expect(tipo.puntuaciones, {1: 3, 2: 2, 3: 1});
+    });
+  });
+
+  group('Puntos por nivel', () {
+    test('puntos() arma el mapa del 1º, 2º y 3º lugar', () {
+      expect(puntos(6, 4, 2), {1: 6, 2: 4, 3: 2});
+    });
+
+    test('sin puntos del nivel se usan los del color', () {
+      expect(TipoAmarillo().puntosNivel, isNull);
+      expect(TipoAmarillo().puntuaciones, TipoAmarillo().puntuacionesBase);
+    });
+
+    test('los puntos del nivel reemplazan a los del color', () {
+      final tipo = TipoAmarillo(puntos(6, 4, 2));
+      expect(tipo.puntuaciones, {1: 6, 2: 4, 3: 2});
+      expect(tipo.puntuacionesBase, {1: 8, 2: 6, 3: 4});
+    });
+
+    test('los puntos del nivel no cambian la regla del color', () {
+      final tipo = TipoAzul(puntos(8, 6, 4));
+      expect(tipo.esPosibleAgregar([3], 3), isTrue);
+      expect(tipo.esPosibleAgregar([3], 4), isFalse);
+    });
+  });
 }

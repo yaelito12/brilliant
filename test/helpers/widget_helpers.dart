@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +9,7 @@ import 'package:brilliant/bloc/partida_state.dart';
 import 'package:brilliant/main.dart';
 import 'package:brilliant/nivel1.dart';
 import 'package:brilliant/tablero.dart';
+import 'package:brilliant/tablero_ui.dart';
 
 /// Color de texto/contornos que usa la interfaz (_colorTexto en tablero_ui).
 const colorTexto = Color(0xFF1B3B4D);
@@ -156,4 +159,92 @@ void tableroCoincideConEstado(PartidaState estado) {
       reason: 'cantidad de números $n en el tablero',
     );
   }
+}
+
+/// Random que devuelve los dados indicados, en orden (para tiradas fijas).
+class DadosFijos implements Random {
+  final List<int> _valores;
+  int _i = 0;
+
+  DadosFijos(this._valores);
+
+  @override
+  int nextInt(int max) => _valores[_i++] - 1;
+
+  @override
+  double nextDouble() => throw UnimplementedError();
+
+  @override
+  bool nextBool() => throw UnimplementedError();
+}
+
+/// Toca la casilla inicial [c] y elige [numero] en la hoja de abajo.
+Future<void> ponerNumeroEn(
+  WidgetTester tester,
+  Coordenada c,
+  int numero,
+) async {
+  await tocarCelda(tester, c);
+  await tester.tap(find.descendant(
+    of: find.byType(BottomSheet),
+    matching: find.text('$numero'),
+  ));
+  await tester.pumpAndSettle();
+}
+
+/// Casillas del tablero pintadas con el color [color] (degradado de la celda).
+Finder celdasDeColor(Color color) => find.descendant(
+      of: tablero(),
+      matching: find.byWidgetPredicate((w) {
+        if (w is! Container) return false;
+        final d = w.decoration;
+        if (d is! BoxDecoration) return false;
+        final g = d.gradient;
+        return g is LinearGradient && g.colors[1] == color;
+      }),
+    );
+
+/// Botón de mapa de la barra superior.
+Finder botonMapa() => find.descendant(
+      of: find.byType(AppBar),
+      matching: find.byIcon(Icons.map),
+    );
+
+Finder enDialogo(Finder f) =>
+    find.descendant(of: find.byType(AlertDialog), matching: f);
+
+Future<void> abrirSelector(WidgetTester tester) async {
+  await tester.tap(botonMapa());
+  await tester.pumpAndSettle();
+}
+
+/// Abre el selector y toca el mapa con nombre [nombre] (ej. "Nivel 2").
+Future<void> elegirMapa(WidgetTester tester, String nombre) async {
+  await abrirSelector(tester);
+  await tester.tap(enDialogo(find.text(nombre)));
+  await tester.pumpAndSettle();
+}
+
+/// Texto del botón de mapa de la barra superior (ej. "Nivel 1").
+String nivelEnBarra(WidgetTester tester) {
+  final textos = tester.widgetList<Text>(find.descendant(
+    of: find.byType(AppBar),
+    matching: find.textContaining('Nivel'),
+  ));
+  return textos.single.data!;
+}
+
+/// Abre la pantalla con los mapas oficiales, elige [nombre] y, si se dan
+/// [dados], las tiradas salen en ese orden.
+Future<void> abrirMapa(
+  WidgetTester tester,
+  String nombre, {
+  List<int>? dados,
+  Size tamano = pantallaAncha,
+}) async {
+  usarPantalla(tester, tamano);
+  await tester.pumpWidget(MaterialApp(
+    home: TableroPage(random: dados == null ? null : DadosFijos(dados)),
+  ));
+  await elegirMapa(tester, nombre);
 }
