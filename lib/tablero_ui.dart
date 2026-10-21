@@ -67,6 +67,45 @@ class _TableroViewState extends State<_TableroView> {
     );
   }
 
+  /// Sale de la partida (o se rinde) y vuelve al menú de mapas. Si hay
+  /// progreso pide confirmación, porque la partida se pierde.
+  Future<void> _salir(BuildContext context) async {
+    final partida = context.read<PartidaBloc>().state;
+    final enCurso = partida.iniciada && !partida.terminada;
+    final hayProgreso =
+        enCurso || (!partida.iniciada && _valoresIniciales.isNotEmpty);
+
+    if (hayProgreso) {
+      final confirmado = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          icon: Icon(Icons.flag, color: Colors.red.shade700, size: 40),
+          title: Text(enCurso ? '¿Rendirse?' : '¿Salir al menú?'),
+          content: const Text(
+            'Se perderá esta partida y volverás al menú de mapas.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.red.shade700,
+              ),
+              child: Text(enCurso ? 'Sí, rendirme' : 'Sí, salir'),
+            ),
+          ],
+        ),
+      );
+      if (confirmado != true || !context.mounted) return;
+    }
+
+    final navegador = Navigator.of(context);
+    if (navegador.canPop()) navegador.pop();
+  }
+
   void _alTocarCelda(BuildContext context, Coordenada coordenada) {
     final partida = context.read<PartidaBloc>();
 
@@ -289,161 +328,172 @@ class _TableroViewState extends State<_TableroView> {
 
   @override
   Widget build(BuildContext context) {
-    return MultiBlocListener(
-      listeners: [
-        BlocListener<JuegoBloc, JuegoState>(
-          listener: (context, state) {
-            if (state is JuegoListo) {
-              context.read<PartidaBloc>().add(
-                PartidaIniciada(_tablero, Map.of(_valoresIniciales)),
-              );
-              _mostrarSnack(
-                context,
-                Icons.check_circle,
-                '¡Valores iniciales listos! El juego puede comenzar.',
-              );
-            }
-          },
-        ),
-        // Al colocar un número: aviso si completó una zona o el tablero
-        // (los dados del siguiente turno ya se tiraron solos)
-        BlocListener<PartidaBloc, PartidaState>(
-          listenWhen: (anterior, actual) =>
-              actual.ultimaColocada != null &&
-              anterior.ultimaColocada != actual.ultimaColocada,
-          listener: (context, state) {
-            final tablero = state.tablero!;
-            final completadas = tablero.ordenCompletadas;
-            final completoZona =
-                completadas.isNotEmpty &&
-                tablero.zonaEn(state.ultimaColocada!)?.id == completadas.last;
+    // El "atrás" del sistema pasa por la misma confirmación que Rendirse
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _salir(context);
+      },
+      child: MultiBlocListener(
+        listeners: [
+          BlocListener<JuegoBloc, JuegoState>(
+            listener: (context, state) {
+              if (state is JuegoListo) {
+                context.read<PartidaBloc>().add(
+                  PartidaIniciada(_tablero, Map.of(_valoresIniciales)),
+                );
+                _mostrarSnack(
+                  context,
+                  Icons.check_circle,
+                  '¡Valores iniciales listos! El juego puede comenzar.',
+                );
+              }
+            },
+          ),
+          // Al colocar un número: aviso si completó una zona o el tablero
+          // (los dados del siguiente turno ya se tiraron solos)
+          BlocListener<PartidaBloc, PartidaState>(
+            listenWhen: (anterior, actual) =>
+                actual.ultimaColocada != null &&
+                anterior.ultimaColocada != actual.ultimaColocada,
+            listener: (context, state) {
+              final tablero = state.tablero!;
+              final completadas = tablero.ordenCompletadas;
+              final completoZona =
+                  completadas.isNotEmpty &&
+                  tablero.zonaEn(state.ultimaColocada!)?.id == completadas.last;
 
-            if (state.terminada) {
-              _mostrarSnack(
-                context,
-                Icons.emoji_events,
-                '¡Tablero completo! Puntuación final: ${state.puntuacion}',
-              );
-            } else if (completoZona) {
-              final id = completadas.last;
-              final color = nombreDeTipo(tablero.zonas[id]!.tipo).toLowerCase();
-              _mostrarSnack(
-                context,
-                Icons.star,
-                '¡Zona $color completada! +${tablero.puntosDe(id)} puntos',
-              );
-            }
-          },
-        ),
-      ],
-      child: BlocBuilder<JuegoBloc, JuegoState>(
-        builder: (context, juego) {
-          return BlocBuilder<PartidaBloc, PartidaState>(
-            builder: (context, partida) {
-              return Scaffold(
-                backgroundColor: const Color(0xFFE8F2ED),
-                appBar: AppBar(
-                  title: const Text(
-                    'Brilliant',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  backgroundColor: Colors.teal.shade700,
-                  foregroundColor: Colors.white,
-                  actions: [
-                    // Mapa que se está jugando
-                    const Icon(Icons.map, size: 20),
-                    const SizedBox(width: 6),
-                    Text(
-                      widget.nivel.nombre,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
+              if (state.terminada) {
+                _mostrarSnack(
+                  context,
+                  Icons.emoji_events,
+                  '¡Tablero completo! Puntuación final: ${state.puntuacion}',
+                );
+              } else if (completoZona) {
+                final id = completadas.last;
+                final color = nombreDeTipo(tablero.zonas[id]!.tipo).toLowerCase();
+                _mostrarSnack(
+                  context,
+                  Icons.star,
+                  '¡Zona $color completada! +${tablero.puntosDe(id)} puntos',
+                );
+              }
+            },
+          ),
+        ],
+        child: BlocBuilder<JuegoBloc, JuegoState>(
+          builder: (context, juego) {
+            return BlocBuilder<PartidaBloc, PartidaState>(
+              builder: (context, partida) {
+                return Scaffold(
+                  backgroundColor: const Color(0xFFE8F2ED),
+                  appBar: AppBar(
+                    title: const Text(
+                      'Brilliant',
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(width: 16),
-                  ],
-                ),
-                // Los dados y el botón van pegados al tablero para no
-                // tener que cruzar la pantalla en cada jugada
-                body: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final tablero = _buildTablero(context, juego, partida);
-                    final leyenda = _LeyendaChips(
-                      tablero: partida.tablero ?? _tablero,
-                    );
-
-                    // Pantalla ancha: panel justo a la derecha del tablero
-                    if (constraints.maxWidth >= 860) {
-                      const anchoPanel = 320.0;
-                      final lado = min(
-                        min(constraints.maxHeight - 32, 640.0),
-                        constraints.maxWidth - anchoPanel - 64,
+                    backgroundColor: Colors.teal.shade700,
+                    foregroundColor: Colors.white,
+                    // Sin flecha de regreso: se sale con Rendirse/Salir
+                    automaticallyImplyLeading: false,
+                    actions: [
+                      // Mapa que se está jugando
+                      const Icon(Icons.map, size: 20),
+                      const SizedBox(width: 6),
+                      Text(
+                        widget.nivel.nombre,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(width: 12),
+                      _buildBotonSalir(context, partida),
+                      const SizedBox(width: 8),
+                    ],
+                  ),
+                  // Los dados y el botón van pegados al tablero para no
+                  // tener que cruzar la pantalla en cada jugada
+                  body: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final tablero = _buildTablero(context, juego, partida);
+                      final leyenda = _LeyendaChips(
+                        tablero: partida.tablero ?? _tablero,
                       );
-                      return Center(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(width: lado, height: lado, child: tablero),
-                            const SizedBox(width: 16),
-                            SizedBox(
-                              width: anchoPanel,
-                              height: lado,
-                              child: Center(
-                                child: SingleChildScrollView(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      _buildPanelLateral(
-                                        context,
-                                        juego,
-                                        partida,
-                                      ),
-                                      const SizedBox(height: 12),
-                                      leyenda,
-                                    ],
+
+                      // Pantalla ancha: panel justo a la derecha del tablero
+                      if (constraints.maxWidth >= 860) {
+                        const anchoPanel = 320.0;
+                        final lado = min(
+                          min(constraints.maxHeight - 32, 640.0),
+                          constraints.maxWidth - anchoPanel - 64,
+                        );
+                        return Center(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(width: lado, height: lado, child: tablero),
+                              const SizedBox(width: 16),
+                              SizedBox(
+                                width: anchoPanel,
+                                height: lado,
+                                child: Center(
+                                  child: SingleChildScrollView(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        _buildPanelLateral(
+                                          context,
+                                          juego,
+                                          partida,
+                                        ),
+                                        const SizedBox(height: 12),
+                                        leyenda,
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
+                            ],
+                          ),
+                        );
+                      }
 
-                    // Pantalla angosta: tarjeta justo debajo del tablero
-                    return Column(
-                      children: [
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                            child: Center(
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 560,
+                      // Pantalla angosta: tarjeta justo debajo del tablero
+                      return Column(
+                        children: [
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                              child: Center(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 560,
+                                  ),
+                                  child: tablero,
                                 ),
-                                child: tablero,
                               ),
                             ),
                           ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 560),
-                            child: _buildPanelInferior(context, juego, partida),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 560),
+                              child: _buildPanelInferior(context, juego, partida),
+                            ),
                           ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-                          child: leyenda,
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              );
-            },
-          );
-        },
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+                            child: leyenda,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
@@ -729,6 +779,25 @@ class _TableroViewState extends State<_TableroView> {
           : sinTirar
           ? () => context.read<PartidaBloc>().add(DadosLanzados())
           : () => _alPulsarSiguiente(context),
+    );
+  }
+
+  /// Botón de la barra superior para volver al menú de mapas: "Rendirse"
+  /// con la partida en curso y "Salir" antes de empezar o al terminar.
+  Widget _buildBotonSalir(BuildContext context, PartidaState partida) {
+    final enCurso = partida.iniciada && !partida.terminada;
+
+    return Tooltip(
+      message: 'Volver al menú de mapas',
+      child: TextButton.icon(
+        onPressed: () => _salir(context),
+        icon: Icon(enCurso ? Icons.flag : Icons.logout),
+        label: Text(enCurso ? 'Rendirse' : 'Salir'),
+        style: TextButton.styleFrom(
+          foregroundColor: Colors.white,
+          backgroundColor: Colors.white.withValues(alpha: 0.15),
+        ),
+      ),
     );
   }
 
