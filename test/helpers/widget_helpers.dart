@@ -221,6 +221,8 @@ Future<void> abrirSelector(WidgetTester tester) async {
 /// Abre el selector y toca el mapa con nombre [nombre] (ej. "Nivel 2").
 Future<void> elegirMapa(WidgetTester tester, String nombre) async {
   await abrirSelector(tester);
+  await tester.ensureVisible(enDialogo(find.text(nombre)));
+  await tester.pumpAndSettle();
   await tester.tap(enDialogo(find.text(nombre)));
   await tester.pumpAndSettle();
 }
