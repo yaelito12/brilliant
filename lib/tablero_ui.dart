@@ -423,13 +423,20 @@ class _TableroViewState extends State<_TableroView> {
                         const anchoPanel = 320.0;
                         final lado = min(
                           min(constraints.maxHeight - 32, 640.0),
-                          constraints.maxWidth - anchoPanel - 64,
+                          constraints.maxWidth -
+                              anchoPanel -
+                              64 -
+                              2 * _anchoIndicadores,
                         );
                         return Center(
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              SizedBox(width: lado, height: lado, child: tablero),
+                              SizedBox(
+                                width: lado + 2 * _anchoIndicadores,
+                                height: lado,
+                                child: tablero,
+                              ),
                               const SizedBox(width: 16),
                               SizedBox(
                                 width: anchoPanel,
@@ -467,7 +474,7 @@ class _TableroViewState extends State<_TableroView> {
                               child: Center(
                                 child: ConstrainedBox(
                                   constraints: const BoxConstraints(
-                                    maxWidth: 560,
+                                    maxWidth: 560 + 2 * _anchoIndicadores,
                                   ),
                                   child: tablero,
                                 ),
@@ -533,8 +540,53 @@ class _TableroViewState extends State<_TableroView> {
       );
   }
 
-  /// El tablero 7x7.
+  /// El tablero 7x7 con los indicadores de cada zona a los lados (regla y
+  /// puntos), como en la hoja del nivel.
   Widget _buildTablero(
+    BuildContext context,
+    JuegoState juego,
+    PartidaState partida,
+  ) {
+    final cuadro = _buildCuadricula(context, juego, partida);
+    final tablero = partida.tablero ?? _tablero;
+
+    Widget columna(List<String> ids) => SizedBox(
+          width: _anchoIndicadores,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              for (final id in ids) _IndicadorZona(zona: tablero.zonas[id]!),
+            ],
+          ),
+        );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final lado = min(
+          constraints.maxWidth - 2 * _anchoIndicadores,
+          constraints.maxHeight.isFinite
+              ? constraints.maxHeight
+              : double.infinity,
+        );
+        return Center(
+          child: SizedBox(
+            width: lado + 2 * _anchoIndicadores,
+            height: lado,
+            child: Row(
+              children: [
+                columna(widget.nivel.indicadoresIzquierda),
+                SizedBox(width: lado, height: lado, child: cuadro),
+                columna(widget.nivel.indicadoresDerecha),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Solo la cuadrícula 7x7 de casillas.
+  Widget _buildCuadricula(
     BuildContext context,
     JuegoState juego,
     PartidaState partida,
@@ -1162,6 +1214,115 @@ class _LeyendaZonas extends StatelessWidget {
 }
 
 const _colorTexto = Color(0xFF1B3B4D);
+
+/// Ancho de cada columna de indicadores a los lados del tablero.
+const _anchoIndicadores = 48.0;
+
+/// Símbolo de la regla de cada tipo, como en la hoja del nivel.
+String simboloDeTipo(Tipo tipo) {
+  if (tipo is TipoVerde) return '?';
+  if (tipo is TipoAzul || tipo is TipoGris) return '=';
+  if (tipo is TipoRojo || tipo is TipoAmarillo) return '≠';
+  if (tipo is TipoMorado) return 'XO';
+  if (tipo is TipoNaranja) return '${tipo.minimo}-${tipo.maximo}';
+  return '?';
+}
+
+/// Indicador de una zona al lado del tablero: cuadro de su color con el
+/// símbolo de su regla y, debajo, los puntos del 1º, 2º y 3º en llenarla.
+/// Cuando la zona está llena lleva una palomita.
+class _IndicadorZona extends StatelessWidget {
+  final Zona zona;
+
+  const _IndicadorZona({required this.zona});
+
+  @override
+  Widget build(BuildContext context) {
+    final tipo = zona.tipo;
+    final simbolo = simboloDeTipo(tipo);
+
+    return Tooltip(
+      message: 'Zona ${nombreDeTipo(tipo).toLowerCase()}: '
+          '${tipo.descripcion}',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 40,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: colorDeTipo(tipo),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 2,
+                      offset: Offset(1, 1),
+                    ),
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  simbolo,
+                  style: TextStyle(
+                    fontSize: simbolo.length > 1 ? 12 : 17,
+                    fontWeight: FontWeight.w900,
+                    color: _colorTexto,
+                  ),
+                ),
+              ),
+              if (zona.estaCompleta)
+                Positioned(
+                  top: -5,
+                  right: -5,
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.done,
+                      size: 14,
+                      color: Colors.teal.shade700,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final lugar in [1, 2, 3])
+                Container(
+                  width: 14,
+                  height: 14,
+                  margin: const EdgeInsets.symmetric(horizontal: 0.5),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: lugar == 1 ? _colorTexto : Colors.grey.shade500,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    '${tipo.puntuaciones[lugar] ?? 0}',
+                    style: const TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// Tarjeta blanca del panel lateral, con título opcional.
 class _Tarjeta extends StatelessWidget {

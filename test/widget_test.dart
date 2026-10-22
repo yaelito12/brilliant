@@ -258,9 +258,14 @@ void main() {
         for (final lugar in ['1º', '2º', '3º']) {
           expect(find.text(lugar), findsOneWidget);
         }
-        // Amarillo es el único con 8 (1º) y azul el único con 7 (1º)
-        expect(find.text('8'), findsOneWidget);
-        expect(find.text('7'), findsOneWidget);
+        // En la hoja, amarillo es el único con 8 (1º) y azul el único con
+        // 7 (1º). Los indicadores del tablero también muestran puntos.
+        Finder enHoja(String texto) => find.descendant(
+              of: find.byType(BottomSheet),
+              matching: find.text(texto),
+            );
+        expect(enHoja('8'), findsOneWidget);
+        expect(enHoja('7'), findsOneWidget);
       });
     });
   });
