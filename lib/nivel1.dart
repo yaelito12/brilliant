@@ -7,6 +7,8 @@ final Nivel nivel1 = Nivel(
   numero: 1,
   construirTablero: construirTableroNivel1,
   casillasIniciales: casillasInicialesNivel1,
+  indicadoresIzquierda: ['az1', 've1', 'ro1', 'mo2'],
+  indicadoresDerecha: ['mo1', 'am', 've2', 'az2', 'ro2'],
 );
 
 /// Las 6 casillas marcadas con X en el tablero del Nivel 1.

@@ -43,10 +43,19 @@ class Nivel {
 
   final Set<Coordenada> casillasIniciales;
 
+  /// IDs de las zonas cuyo indicador (regla y puntos) va a la izquierda
+  /// del tablero, de arriba a abajo, como en la hoja del nivel.
+  final List<String> indicadoresIzquierda;
+
+  /// IDs de las zonas cuyo indicador va a la derecha del tablero.
+  final List<String> indicadoresDerecha;
+
   const Nivel({
     required this.numero,
     required this.construirTablero,
     required this.casillasIniciales,
+    this.indicadoresIzquierda = const [],
+    this.indicadoresDerecha = const [],
   });
 
   String get nombre => 'Nivel $numero';

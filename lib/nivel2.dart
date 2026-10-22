@@ -47,4 +47,6 @@ final Nivel nivel2 = Nivel(
   numero: 2,
   construirTablero: construirTableroNivel2,
   casillasIniciales: casillasInicialesNivel2,
+  indicadoresIzquierda: ['am', 'mo1', 'ro1', 'az2', 've2'],
+  indicadoresDerecha: ['ve1', 'az1', 'ro2', 'mo2', 'gr'],
 );
