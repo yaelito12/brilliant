@@ -73,6 +73,20 @@ export function crearApp({ config, db }) {
     limpiarFallos: db.prepare('DELETE FROM login_failures WHERE updated_at < ?'),
   };
 
+  // node:sqlite no trae db.transaction(): se hace a mano. Si [fn] termina bien se
+  // guarda todo (incluso si devuelve un "error" de negocio); si lanza, se deshace.
+  function enTransaccion(fn) {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const resultado = fn();
+      db.exec('COMMIT');
+      return resultado;
+    } catch (e) {
+      db.exec('ROLLBACK');
+      throw e;
+    }
+  }
+
   // ---------- Bloqueo por intentos fallidos ----------
   function segundosDeBloqueo(email) {
     const f = q.fallo.get(seg.hashClaveEmail(email));
@@ -175,7 +189,7 @@ export function crearApp({ config, db }) {
     try {
       q.insertarUsuario.run(id, email, nombre, hash, ahora());
     } catch (e) {
-      if (String(e.code).startsWith('SQLITE_CONSTRAINT')) {
+      if (/UNIQUE constraint failed/i.test(String(e.message))) {
         throw new ApiError(409, 'email_en_uso', 'Ya existe una cuenta con ese correo.');
       }
       throw e;
@@ -210,7 +224,7 @@ export function crearApp({ config, db }) {
 
     // Rotación: cada refresh token sirve UNA vez. Si alguien reutiliza uno ya
     // usado, se asume robo y se revoca toda la familia de sesiones.
-    const resultado = db.transaction(() => {
+    const resultado = enTransaccion(() => {
       const t = q.refreshPorHash.get(hash);
       if (!t) return { error: true };
       if (t.revoked_at || t.used_at) {
@@ -220,7 +234,7 @@ export function crearApp({ config, db }) {
       if (t.expires_at < ahora()) return { error: true };
       if (q.marcarUsado.run(ahora(), t.id).changes !== 1) return { error: true };
       return { userId: t.user_id, familyId: t.family_id };
-    })();
+    });
 
     if (resultado.error) throw new ApiError(401, 'refresh_invalido', 'Sesión inválida o vencida.');
     const usuario = q.usuarioPorId.get(resultado.userId);

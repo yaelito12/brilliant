@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite'; // SQLite incluido en Node (sin compilar nada)
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -6,9 +6,8 @@ export function abrirDb(dbPath) {
   if (dbPath !== ':memory:') {
     fs.mkdirSync(path.dirname(path.resolve(dbPath)), { recursive: true });
   }
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+  const db = new DatabaseSync(dbPath);
+  db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
