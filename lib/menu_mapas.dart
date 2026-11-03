@@ -18,7 +18,10 @@ class MenuMapasPage extends StatefulWidget {
   /// Generador de los dados que se pasa a la partida (para los tests).
   final Random? random;
 
-  const MenuMapasPage({super.key, this.niveles, this.random});
+  /// Botones extra de la barra superior (por ejemplo, el menú de la cuenta).
+  final List<Widget>? acciones;
+
+  const MenuMapasPage({super.key, this.niveles, this.random, this.acciones});
 
   @override
   State<MenuMapasPage> createState() => _MenuMapasPageState();
@@ -50,6 +53,7 @@ class _MenuMapasPageState extends State<MenuMapasPage> {
         ),
         backgroundColor: Colors.teal.shade700,
         foregroundColor: Colors.white,
+        actions: widget.acciones,
       ),
       body: Center(
         child: SingleChildScrollView(
