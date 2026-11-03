@@ -39,11 +39,11 @@ export function crearApp({ config, db }) {
 
   // ---------- Consultas preparadas ----------
   const q = {
-    usuarioPorEmail: db.prepare('SELECT * FROM users WHERE email = ?'),
-    usuarioPorId: db.prepare('SELECT id, email, nombre FROM users WHERE id = ?'),
+    usuarioPorNametag: db.prepare('SELECT * FROM users WHERE nametag_lower = ?'),
+    usuarioPorId: db.prepare('SELECT id, nametag FROM users WHERE id = ?'),
     usuarioConHash: db.prepare('SELECT * FROM users WHERE id = ?'),
     insertarUsuario: db.prepare(
-      'INSERT INTO users (id, email, nombre, password_hash, created_at) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO users (id, nametag, nametag_lower, password_hash, created_at) VALUES (?, ?, ?, ?, ?)',
     ),
     borrarUsuario: db.prepare('DELETE FROM users WHERE id = ?'),
 
@@ -63,13 +63,13 @@ export function crearApp({ config, db }) {
       'DELETE FROM refresh_tokens WHERE expires_at < ? OR (revoked_at IS NOT NULL AND revoked_at < ?)',
     ),
 
-    fallo: db.prepare('SELECT * FROM login_failures WHERE email_key = ?'),
+    fallo: db.prepare('SELECT * FROM login_failures WHERE clave = ?'),
     guardarFallo: db.prepare(
-      `INSERT INTO login_failures (email_key, count, locked_until, updated_at) VALUES (?, ?, ?, ?)
-       ON CONFLICT(email_key) DO UPDATE SET count = excluded.count,
+      `INSERT INTO login_failures (clave, count, locked_until, updated_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(clave) DO UPDATE SET count = excluded.count,
          locked_until = excluded.locked_until, updated_at = excluded.updated_at`,
     ),
-    borrarFallo: db.prepare('DELETE FROM login_failures WHERE email_key = ?'),
+    borrarFallo: db.prepare('DELETE FROM login_failures WHERE clave = ?'),
     limpiarFallos: db.prepare('DELETE FROM login_failures WHERE updated_at < ?'),
   };
 
@@ -88,13 +88,13 @@ export function crearApp({ config, db }) {
   }
 
   // ---------- Bloqueo por intentos fallidos ----------
-  function segundosDeBloqueo(email) {
-    const f = q.fallo.get(seg.hashClaveEmail(email));
+  function segundosDeBloqueo(clave) {
+    const f = q.fallo.get(seg.hashClaveUsuario(clave));
     if (f && f.locked_until > ahora()) return f.locked_until - ahora();
     return 0;
   }
-  function registrarFallo(email) {
-    const key = seg.hashClaveEmail(email);
+  function registrarFallo(clave) {
+    const key = seg.hashClaveUsuario(clave);
     const f = q.fallo.get(key);
     // Si el bloqueo anterior ya venció, se empieza de cero.
     const previos = f && !(f.locked_until && f.locked_until <= ahora()) ? f.count : 0;
@@ -102,7 +102,7 @@ export function crearApp({ config, db }) {
     const lock = count >= config.maxIntentosFallidos ? ahora() + config.bloqueoSeg : 0;
     q.guardarFallo.run(key, lock ? 0 : count, lock, ahora());
   }
-  const limpiarFallos = (email) => q.borrarFallo.run(seg.hashClaveEmail(email));
+  const limpiarFallos = (clave) => q.borrarFallo.run(seg.hashClaveUsuario(clave));
 
   function bloqueadoError(segundos) {
     return new ApiError(
@@ -173,47 +173,49 @@ export function crearApp({ config, db }) {
     next();
   });
 
-  const publico = (u) => ({ id: u.id, email: u.email, nombre: u.nombre });
+  const publico = (u) => ({ id: u.id, nametag: u.nametag });
 
   // ---------- Rutas ----------
   app.get('/health', (_req, res) => res.json({ ok: true }));
 
   app.post('/auth/register', limiteAuth, asyncH(async (req, res) => {
-    const { email, nombre, password } = validar(registroSchema, req.body);
+    const { nametag, password } = validar(registroSchema, req.body);
+    const clave = nametag.toLowerCase();
 
-    if (q.usuarioPorEmail.get(email)) {
-      throw new ApiError(409, 'email_en_uso', 'Ya existe una cuenta con ese correo.');
+    if (q.usuarioPorNametag.get(clave)) {
+      throw new ApiError(409, 'nametag_en_uso', 'Ese nametag ya está en uso.');
     }
     const hash = await seg.hashearPassword(password);
     const id = crypto.randomUUID();
     try {
-      q.insertarUsuario.run(id, email, nombre, hash, ahora());
+      q.insertarUsuario.run(id, nametag, clave, hash, ahora());
     } catch (e) {
       if (/UNIQUE constraint failed/i.test(String(e.message))) {
-        throw new ApiError(409, 'email_en_uso', 'Ya existe una cuenta con ese correo.');
+        throw new ApiError(409, 'nametag_en_uso', 'Ese nametag ya está en uso.');
       }
       throw e;
     }
     const sesion = await emitirSesion(id);
-    res.status(201).json({ ...sesion, user: { id, email, nombre } });
+    res.status(201).json({ ...sesion, user: { id, nametag } });
   }));
 
   app.post('/auth/login', limiteAuth, asyncH(async (req, res) => {
-    const { email, password } = validar(loginSchema, req.body);
+    const { nametag, password } = validar(loginSchema, req.body);
+    const clave = nametag.toLowerCase();
 
-    const espera = segundosDeBloqueo(email);
+    const espera = segundosDeBloqueo(clave);
     if (espera > 0) throw bloqueadoError(espera);
 
-    const usuario = q.usuarioPorEmail.get(email);
+    const usuario = q.usuarioPorNametag.get(clave);
     let ok = false;
     if (usuario) ok = await seg.verificarPassword(usuario.password_hash, password);
     else await seg.verificarContraSenuelo(password); // mismo coste de tiempo
 
     if (!ok) {
-      registrarFallo(email);
-      throw new ApiError(401, 'credenciales_invalidas', 'Correo o contraseña incorrectos.');
+      registrarFallo(clave);
+      throw new ApiError(401, 'credenciales_invalidas', 'Nametag o contraseña incorrectos.');
     }
-    limpiarFallos(email);
+    limpiarFallos(clave);
     const sesion = await emitirSesion(usuario.id);
     res.json({ ...sesion, user: publico(usuario) });
   }));
@@ -262,17 +264,17 @@ export function crearApp({ config, db }) {
   // robado por sí solo no basta para destruir la cuenta.
   app.post('/account/delete', limiteAuth, requiereAuth, asyncH(async (req, res) => {
     const { password } = validar(borrarCuentaSchema, req.body);
-    const { email } = req.usuario;
+    const clave = req.usuario.nametag.toLowerCase();
 
-    const espera = segundosDeBloqueo(email);
+    const espera = segundosDeBloqueo(clave);
     if (espera > 0) throw bloqueadoError(espera);
 
     const completo = q.usuarioConHash.get(req.usuario.id);
     if (!(await seg.verificarPassword(completo.password_hash, password))) {
-      registrarFallo(email);
+      registrarFallo(clave);
       throw new ApiError(403, 'password_incorrecta', 'La contraseña es incorrecta.');
     }
-    limpiarFallos(email);
+    limpiarFallos(clave);
     q.borrarUsuario.run(req.usuario.id); // ON DELETE CASCADE borra sus refresh tokens
     res.status(204).end();
   }));

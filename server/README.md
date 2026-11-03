@@ -24,8 +24,8 @@ Todas las respuestas son JSON. Los errores tienen la forma
 
 | Método | Ruta | Cuerpo | Respuesta |
 |---|---|---|---|
-| POST | `/auth/register` | `email`, `nombre`, `password` | 201 + sesión |
-| POST | `/auth/login` | `email`, `password` | 200 + sesión |
+| POST | `/auth/register` | `nametag`, `password` | 201 + sesión |
+| POST | `/auth/login` | `nametag`, `password` | 200 + sesión |
 | POST | `/auth/refresh` | `refreshToken` | 200 + sesión nueva |
 | POST | `/auth/logout` | `refreshToken` | 204 |
 | POST | `/auth/logout-all` | — (Bearer) | 204 |
@@ -33,7 +33,7 @@ Todas las respuestas son JSON. Los errores tienen la forma
 | POST | `/account/delete` | `password` (Bearer) | 204 |
 | GET | `/health` | — | 200 |
 
-"Sesión" = `{accessToken, refreshToken, expiresIn, user: {id, email, nombre}}`.
+"Sesión" = `{accessToken, refreshToken, expiresIn, user: {id, nametag}}`.
 Las rutas protegidas llevan `Authorization: Bearer <accessToken>`.
 
 ## Qué hace para ser seguro
@@ -41,8 +41,8 @@ Las rutas protegidas llevan `Authorization: Bearer <accessToken>`.
 | Amenaza | Medida |
 |---|---|
 | Robo de la base de datos | Contraseñas con **Argon2id** (64 MiB, t=3) y sal propia por usuario; pepper opcional fuera de la BD. Los refresh tokens se guardan como SHA-256. |
-| Fuerza bruta | Bloqueo de 15 min tras 5 fallos por correo (existan o no) + límite por IP (20 peticiones/15 min en rutas de auth). |
-| Enumeración de usuarios | Mismo mensaje y mismo tiempo de respuesta si el correo no existe (hash señuelo). El bloqueo también aplica a correos inexistentes. |
+| Fuerza bruta | Bloqueo de 15 min tras 5 fallos por nametag (existan o no) + límite por IP (20 peticiones/15 min en rutas de auth). |
+| Enumeración de usuarios | Mismo mensaje y mismo tiempo de respuesta si el nametag no existe (hash señuelo). El bloqueo también aplica a nametags inexistentes. |
 | Robo de tokens | Access token JWT de 15 min (HS256, con `iss`/`aud`/`exp`, algoritmo fijado). Refresh token aleatorio de 256 bits, **de un solo uso con rotación**: si se reutiliza uno viejo se revoca toda la sesión. |
 | Cuenta borrada | El access token se valida contra la BD en cada petición, así que deja de servir al instante. Borrar la cuenta exige la contraseña de nuevo. |
 | Inyección / abuso | Consultas SQL preparadas, validación con Zod, cuerpo máximo 10 KB, `helmet`, sin `X-Powered-By`, `Cache-Control: no-store`. |
@@ -62,9 +62,14 @@ Paquetes de seguridad usados (no se implementó criptografía propia):
 
 ## Límites conocidos (a propósito, para esta entrega)
 
-- No hay verificación del correo ni "olvidé mi contraseña" (necesita enviar correos).
-- Registrar un correo ya usado responde 409; sin verificación de correo no hay forma de evitar
-  esa filtración sin romper la experiencia de registro. Está protegido por el límite por IP.
-- El bloqueo por correo permite que alguien bloquee 15 min a otra persona a propósito; es el
+- **No hay correo:** la cuenta es solo nametag y contraseña, así que **no existe "olvidé mi
+  contraseña"**. Si alguien la pierde, pierde la cuenta.
+- **Contraseña mínima de 6 caracteres** (se rechazan las más obvias como `123456` o `qwerty`).
+  Es una política débil a propósito; lo que la protege es Argon2id, el bloqueo tras 5 fallos y el
+  límite por IP. Si algún día quieres más seguridad, basta subir el mínimo en
+  `server/src/validation.js` y en `lib/auth/validadores.dart`.
+- El nametag es público y único (sin distinguir mayúsculas), así que registrar uno ya usado responde
+  409. Es inevitable en cualquier juego con nombres públicos; está protegido por el límite por IP.
+- El bloqueo por nametag permite que alguien bloquee 15 min a otra persona a propósito; es el
   coste habitual de este tipo de protección.
 - SQLite sirve para un solo servidor. Para varias instancias habría que pasar a PostgreSQL.

@@ -9,11 +9,23 @@ export function abrirDb(dbPath) {
   const db = new DatabaseSync(dbPath);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
+  // Las primeras versiones del proyecto iniciaban sesión con correo. Si la base
+  // de datos es de esa época (tiene la columna "email") se reinicia: eran solo
+  // cuentas de prueba y el esquema nuevo no es compatible.
+  const columnas = db.prepare('PRAGMA table_info(users)').all();
+  if (columnas.some((c) => c.name === 'email')) {
+    console.warn('AVISO: base de datos con el esquema antiguo (correo). Se reinicia.');
+    db.exec('DROP TABLE IF EXISTS refresh_tokens; DROP TABLE IF EXISTS login_failures; DROP TABLE users;');
+  }
+
   db.exec(`
+    -- "nametag" es el nombre público (con sus mayúsculas) y también el usuario
+    -- con el que se inicia sesión. "nametag_lower" es lo mismo en minúsculas y es
+    -- único: así "Ana" y "ana" no pueden existir a la vez.
     CREATE TABLE IF NOT EXISTS users (
       id            TEXT PRIMARY KEY,
-      email         TEXT NOT NULL UNIQUE,
-      nombre        TEXT NOT NULL,
+      nametag       TEXT NOT NULL,
+      nametag_lower TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
       created_at    INTEGER NOT NULL
     );
@@ -33,10 +45,10 @@ export function abrirDb(dbPath) {
     CREATE INDEX IF NOT EXISTS idx_refresh_user   ON refresh_tokens(user_id);
     CREATE INDEX IF NOT EXISTS idx_refresh_family ON refresh_tokens(family_id);
 
-    -- Intentos de login fallidos por correo (existan o no en la base, para
-    -- no revelar qué correos están registrados).
+    -- Intentos de login fallidos por nametag (exista o no en la base, para
+    -- no revelar qué nametags están registrados).
     CREATE TABLE IF NOT EXISTS login_failures (
-      email_key    TEXT PRIMARY KEY,
+      clave        TEXT PRIMARY KEY,
       count        INTEGER NOT NULL,
       locked_until INTEGER NOT NULL DEFAULT 0,
       updated_at   INTEGER NOT NULL

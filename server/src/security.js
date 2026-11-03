@@ -17,7 +17,7 @@ export function crearSeguridad(config) {
     ...(pepper ? { secret: pepper } : {}),
   };
 
-  // Hash "señuelo": cuando el correo no existe también se hace una verificación
+  // Hash "señuelo": cuando el nametag no existe también se hace una verificación
   // de Argon2 para que la respuesta tarde lo mismo (evita enumerar usuarios por tiempo).
   let hashSenuelo;
   const obtenerSenuelo = async () =>
@@ -66,7 +66,8 @@ export function crearSeguridad(config) {
 
     nuevoRefreshToken: () => crypto.randomBytes(32).toString('base64url'),
     hashToken: (token) => crypto.createHash('sha256').update(token).digest('hex'),
-    hashClaveEmail: (email) =>
-      crypto.createHmac('sha256', config.jwtSecret).update(email).digest('hex'),
+    // Clave (anónima) para contar intentos fallidos de un nametag.
+    hashClaveUsuario: (nametagMinusculas) =>
+      crypto.createHmac('sha256', config.jwtSecret).update(nametagMinusculas).digest('hex'),
   };
 }

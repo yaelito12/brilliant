@@ -42,7 +42,7 @@ export function cargarConfig(env = process.env) {
       parallelism: entero(env.ARGON2_PARALLELISM, 1),
     },
 
-    // Bloqueo de cuenta por intentos fallidos (por correo, exista o no).
+    // Bloqueo de cuenta por intentos fallidos (por nametag, exista o no).
     maxIntentosFallidos: entero(env.MAX_FAILED_LOGINS, 5),
     bloqueoSeg: entero(env.LOCKOUT_SECONDS, 15 * 60),
 

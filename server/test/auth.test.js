@@ -1,6 +1,10 @@
 import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 import { cargarConfig } from '../src/config.js';
 import { abrirDb } from '../src/db.js';
@@ -47,8 +51,8 @@ async function api(method, path, body, token, rawBody) {
   return { status: res.status, headers: res.headers, json: text ? JSON.parse(text) : null };
 }
 
-const registrar = (email = 'ana@example.com', extra = {}) =>
-  api('POST', '/auth/register', { email, nombre: 'Ana', password: PASS, ...extra });
+const registrar = (nametag = 'Ana', extra = {}) =>
+  api('POST', '/auth/register', { nametag, password: PASS, ...extra });
 
 before(() => arrancar());
 after(parar);
@@ -60,7 +64,8 @@ test('registro devuelve sesión y NO guarda la contraseña en claro', async () =
   const r = await registrar();
   assert.equal(r.status, 201);
   assert.ok(r.json.accessToken && r.json.refreshToken);
-  assert.equal(r.json.user.email, 'ana@example.com');
+  assert.equal(r.json.user.nametag, 'Ana');
+  assert.equal(r.json.user.email, undefined);
   assert.equal(r.json.user.password, undefined);
 
   const fila = db.prepare('SELECT * FROM users').get();
@@ -70,51 +75,61 @@ test('registro devuelve sesión y NO guarda la contraseña en claro', async () =
   assert.notEqual(rt.token_hash, r.json.refreshToken); // solo se guarda el hash
 });
 
-test('registro normaliza el correo y rechaza duplicados', async () => {
-  assert.equal((await registrar('  ANA@Example.com ')).status, 201);
-  const dup = await registrar('ana@example.com');
-  assert.equal(dup.status, 409);
-  assert.equal(dup.json.error.code, 'email_en_uso');
+test('el nametag es único sin importar mayúsculas y conserva las que se eligieron', async () => {
+  const primero = await registrar('  Ana_99 ');
+  assert.equal(primero.status, 201);
+  assert.equal(primero.json.user.nametag, 'Ana_99'); // sin espacios, con sus mayúsculas
+  for (const repetido of ['ana_99', 'ANA_99', 'Ana_99']) {
+    const dup = await registrar(repetido);
+    assert.equal(dup.status, 409, repetido);
+    assert.equal(dup.json.error.code, 'nametag_en_uso');
+  }
 });
 
 test('registro valida los datos', async () => {
   const malos = [
-    { email: 'no-es-correo' },
-    { password: 'corta' },
+    { nametag: 'ab' }, // muy corto
+    { nametag: 'a'.repeat(21) }, // muy largo
+    { nametag: 'con espacio' },
+    { nametag: '<script>' },
+    { nametag: 'Ánder' }, // acentos no permitidos
+    { password: '12345' }, // menos de 6
     { password: 'a'.repeat(129) },
-    { password: 'password123' },
-    { password: 'aaaaaaaaaaaa' },
-    { nombre: '<script>' },
-    { nombre: 'A' },
+    { password: '123456' }, // demasiado común
+    { password: 'qwerty' },
+    { password: 'aaaaaa' },
+    { password: 'Pepe_01' }, // igual que su nametag (se prueba con nametag Pepe_01)
   ];
   for (const m of malos) {
-    const r = await registrar('x@example.com', m);
+    const r = await registrar(m.password === 'Pepe_01' ? 'Pepe_01' : 'Nuevo_1', m);
     assert.equal(r.status, 400, JSON.stringify(m));
     assert.equal(r.json.error.code, 'validacion');
   }
   assert.equal((await api('POST', '/auth/register', {})).status, 400);
+  // 6 caracteres es suficiente si no es una contraseña obvia
+  assert.equal((await registrar('Seis_1', { password: 'zorro7' })).status, 201);
 });
 
 test('login correcto e incorrecto (mismo mensaje exista o no el usuario)', async () => {
   await registrar();
-  const ok = await api('POST', '/auth/login', { email: 'ana@example.com', password: PASS });
+  const ok = await api('POST', '/auth/login', { nametag: 'Ana', password: PASS });
   assert.equal(ok.status, 200);
   assert.ok(ok.json.accessToken);
 
-  const malaPass = await api('POST', '/auth/login', { email: 'ana@example.com', password: 'otra-clave-123' });
-  const noExiste = await api('POST', '/auth/login', { email: 'nadie@example.com', password: 'otra-clave-123' });
+  const malaPass = await api('POST', '/auth/login', { nametag: 'Ana', password: 'otra-clave-123' });
+  const noExiste = await api('POST', '/auth/login', { nametag: 'Nadie', password: 'otra-clave-123' });
   assert.equal(malaPass.status, 401);
   assert.equal(noExiste.status, 401);
   assert.deepEqual(malaPass.json, noExiste.json);
 });
 
-test('bloqueo tras varios intentos fallidos (también para correos inexistentes)', async () => {
+test('bloqueo tras varios intentos fallidos (también para nametags inexistentes)', async () => {
   await registrar();
-  for (const email of ['ana@example.com', 'fantasma@example.com']) {
+  for (const nametag of ['Ana', 'Fantasma']) {
     for (let i = 0; i < config.maxIntentosFallidos; i++) {
-      assert.equal((await api('POST', '/auth/login', { email, password: 'mala-clave-123' })).status, 401);
+      assert.equal((await api('POST', '/auth/login', { nametag, password: 'mala-clave-123' })).status, 401);
     }
-    const bloqueado = await api('POST', '/auth/login', { email, password: PASS });
+    const bloqueado = await api('POST', '/auth/login', { nametag, password: PASS });
     assert.equal(bloqueado.status, 429);
     assert.equal(bloqueado.json.error.code, 'cuenta_bloqueada');
     assert.ok(bloqueado.headers.get('retry-after'));
@@ -124,13 +139,13 @@ test('bloqueo tras varios intentos fallidos (también para correos inexistentes)
 test('un login correcto reinicia el contador de fallos', async () => {
   await registrar();
   for (let i = 0; i < config.maxIntentosFallidos - 1; i++) {
-    await api('POST', '/auth/login', { email: 'ana@example.com', password: 'mala-clave-123' });
+    await api('POST', '/auth/login', { nametag: 'Ana', password: 'mala-clave-123' });
   }
-  assert.equal((await api('POST', '/auth/login', { email: 'ana@example.com', password: PASS })).status, 200);
+  assert.equal((await api('POST', '/auth/login', { nametag: 'Ana', password: PASS })).status, 200);
   for (let i = 0; i < config.maxIntentosFallidos - 1; i++) {
-    await api('POST', '/auth/login', { email: 'ana@example.com', password: 'mala-clave-123' });
+    await api('POST', '/auth/login', { nametag: 'Ana', password: 'mala-clave-123' });
   }
-  assert.equal((await api('POST', '/auth/login', { email: 'ana@example.com', password: PASS })).status, 200);
+  assert.equal((await api('POST', '/auth/login', { nametag: 'Ana', password: PASS })).status, 200);
 });
 
 test('/account/me exige un access token válido', async () => {
@@ -139,7 +154,7 @@ test('/account/me exige un access token válido', async () => {
   assert.equal((await api('GET', '/account/me', undefined, 'basura')).status, 401);
   const me = await api('GET', '/account/me', undefined, json.accessToken);
   assert.equal(me.status, 200);
-  assert.equal(me.json.user.nombre, 'Ana');
+  assert.equal(me.json.user.nametag, 'Ana');
 });
 
 test('rechaza JWT firmado con otra clave, vencido o con alg=none', async () => {
@@ -189,7 +204,7 @@ test('logout revoca el refresh token', async () => {
 
 test('logout-all cierra todas las sesiones', async () => {
   const a = (await registrar()).json;
-  const b = (await api('POST', '/auth/login', { email: 'ana@example.com', password: PASS })).json;
+  const b = (await api('POST', '/auth/login', { nametag: 'Ana', password: PASS })).json;
   assert.equal((await api('POST', '/auth/logout-all', undefined, a.accessToken)).status, 204);
   assert.equal((await api('POST', '/auth/refresh', { refreshToken: a.refreshToken })).status, 401);
   assert.equal((await api('POST', '/auth/refresh', { refreshToken: b.refreshToken })).status, 401);
@@ -207,14 +222,14 @@ test('borrar cuenta: exige contraseña, borra todo y el token deja de servir', a
   assert.equal(db.prepare('SELECT COUNT(*) c FROM refresh_tokens').get().c, 0);
   assert.equal((await api('GET', '/account/me', undefined, s.accessToken)).status, 401);
   assert.equal((await api('POST', '/auth/refresh', { refreshToken: s.refreshToken })).status, 401);
-  assert.equal((await api('POST', '/auth/login', { email: 'ana@example.com', password: PASS })).status, 401);
-  // Se puede volver a registrar con el mismo correo.
+  assert.equal((await api('POST', '/auth/login', { nametag: 'Ana', password: PASS })).status, 401);
+  // Se puede volver a registrar con el mismo nametag.
   assert.equal((await registrar()).status, 201);
 });
 
 test('JSON inválido, cuerpo enorme y rutas inexistentes dan errores limpios', async () => {
   assert.equal((await api('POST', '/auth/login', undefined, undefined, '{no es json')).json.error.code, 'json_invalido');
-  const grande = await api('POST', '/auth/login', { email: 'a@b.co', password: 'x'.repeat(20_000) });
+  const grande = await api('POST', '/auth/login', { nametag: 'ana', password: 'x'.repeat(20_000) });
   assert.equal(grande.status, 413);
   assert.equal((await api('GET', '/nada')).status, 404);
 });
@@ -226,10 +241,14 @@ test('cabeceras de seguridad presentes y sin x-powered-by', async () => {
   assert.equal(r.headers.get('cache-control'), 'no-store');
 });
 
-test('inyección SQL en el correo no funciona', async () => {
+test('inyección SQL en el nametag no funciona', async () => {
   await registrar();
-  const r = await api('POST', '/auth/login', { email: "' OR 1=1 --", password: PASS });
-  assert.equal(r.status, 400);
+  // En el login se trata como un nametag cualquiera: no existe, sin errores ni accesos.
+  const r = await api('POST', '/auth/login', { nametag: "' OR 1=1 --", password: PASS });
+  assert.equal(r.status, 401);
+  // Y no se puede registrar un nametag así.
+  assert.equal((await registrar("x' OR '1'='1")).status, 400);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM users').get().c, 1);
 });
 
 test('límite de peticiones por IP en rutas de autenticación', async () => {
@@ -237,7 +256,7 @@ test('límite de peticiones por IP en rutas de autenticación', async () => {
   await arrancar({ limiteAuth: 3 });
   const estados = [];
   for (let i = 0; i < 5; i++) {
-    estados.push((await api('POST', '/auth/login', { email: 'a@b.co', password: 'x' })).status);
+    estados.push((await api('POST', '/auth/login', { nametag: 'ana', password: 'x' })).status);
   }
   assert.deepEqual(estados, [401, 401, 401, 429, 429]);
   await parar();
@@ -259,11 +278,28 @@ test('la configuración exige un JWT_SECRET largo', () => {
 
 test('autenticarToken (para el futuro servidor de partidas)', async () => {
   const s = (await registrar()).json;
-  assert.equal((await autenticarToken(s.accessToken)).email, 'ana@example.com');
+  assert.equal((await autenticarToken(s.accessToken)).nametag, 'Ana');
   assert.equal(await autenticarToken('basura'), null);
   assert.equal(await autenticarToken(undefined), null);
   assert.equal(await autenticarToken(s.refreshToken), null); // un refresh token no es un access token
 
   await api('POST', '/account/delete', { password: PASS }, s.accessToken);
   assert.equal(await autenticarToken(s.accessToken), null); // cuenta borrada
+});
+
+test('una base de datos con el esquema antiguo (correo) se reinicia sola', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'brilliant-'));
+  const archivo = path.join(dir, 'vieja.db');
+  const vieja = new DatabaseSync(archivo);
+  vieja.exec(`CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE,
+    nombre TEXT NOT NULL, password_hash TEXT NOT NULL, created_at INTEGER NOT NULL);
+    INSERT INTO users VALUES ('1', 'a@b.co', 'Ana', 'x', 1);`);
+  vieja.close();
+
+  const nueva = abrirDb(archivo);
+  const columnas = nueva.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  assert.ok(columnas.includes('nametag') && !columnas.includes('email'));
+  assert.equal(nueva.prepare('SELECT COUNT(*) c FROM users').get().c, 0);
+  nueva.close();
+  fs.rmSync(dir, { recursive: true, force: true });
 });

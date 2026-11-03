@@ -50,8 +50,8 @@ online natural es una **carrera de puntuación**:
 - Tablas nuevas: `partidas` (sala, nivel, fecha), `partida_jugadores` (partida, usuario, puntos,
   turnos, posición) y `ranking` (usuario, rating, partidas jugadas, ganadas).
 - Rutas: `GET /ranking` (top 100), `GET /ranking/yo` (mi posición) y `GET /ranking/nivel/:n`.
-- Solo se muestra el **nombre**, nunca el correo. Ahora el nombre no es único; para el ranking
-  conviene hacerlo único o mostrar un número junto al nombre.
+- Se muestra el **nametag**, que ya es único (sin distinguir mayúsculas), así que no habrá dos
+  jugadores iguales en el ranking. No hay correo ni otro dato personal.
 - Si alguien borra su cuenta, sus resultados deben anonimizarse o borrarse (ya existe `ON DELETE CASCADE`
   para los datos de la cuenta; las tablas nuevas deben seguir la misma regla).
 
