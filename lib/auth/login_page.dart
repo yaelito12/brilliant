@@ -18,12 +18,12 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _form = GlobalKey<FormState>();
-  final _email = TextEditingController();
+  final _nametag = TextEditingController();
   final _password = TextEditingController();
 
   @override
   void dispose() {
-    _email.dispose();
+    _nametag.dispose();
     _password.dispose();
     super.dispose();
   }
@@ -31,7 +31,10 @@ class _LoginPageState extends State<LoginPage> {
   void _enviar() {
     if (!_form.currentState!.validate()) return;
     context.read<AuthBloc>().add(
-      AuthLoginSolicitado(email: _email.text.trim(), password: _password.text),
+      AuthLoginSolicitado(
+        nametag: _nametag.text.trim(),
+        password: _password.text,
+      ),
     );
   }
 
@@ -59,19 +62,19 @@ class _LoginPageState extends State<LoginPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     TextFormField(
-                      controller: _email,
+                      controller: _nametag,
                       enabled: !state.cargando,
-                      keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
-                      autofillHints: const [AutofillHints.email],
+                      autofillHints: const [AutofillHints.username],
                       autocorrect: false,
-                      validator: validarEmail,
-                      forceErrorText: state.errores['email'],
+                      enableSuggestions: false,
+                      validator: validarNametagExistente,
+                      forceErrorText: state.errores['nametag'],
                       onChanged: _alEscribir,
                       decoration: const InputDecoration(
-                        labelText: 'Correo electrónico',
+                        labelText: 'Nametag',
                         border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.email_outlined),
+                        prefixIcon: Icon(Icons.person_outline),
                       ),
                     ),
                     const SizedBox(height: 16),

@@ -11,7 +11,7 @@ const _sesionJson = {
   'accessToken': 'a',
   'refreshToken': 'r',
   'expiresIn': 900,
-  'user': {'id': 'u1', 'email': 'ana@example.com', 'nombre': 'Ana'},
+  'user': {'id': 'u1', 'nametag': 'Ana'},
 };
 
 http.Response _json(int status, Object body, [Map<String, String>? h]) =>
@@ -42,22 +42,17 @@ void main() {
       }),
     );
 
-    final s = await api.registrar(
-      email: 'ana@example.com',
-      nombre: 'Ana',
-      password: 'clave-larga-123',
-    );
+    final s = await api.registrar(nametag: 'Ana', password: 'clave-larga-123');
 
     expect(visto.method, 'POST');
     expect(visto.url.toString(), 'http://srv/auth/register');
     expect(visto.headers['Content-Type'], contains('application/json'));
     expect(jsonDecode(visto.body), {
-      'email': 'ana@example.com',
-      'nombre': 'Ana',
+      'nametag': 'Ana',
       'password': 'clave-larga-123',
     });
     expect(s.accessToken, 'a');
-    expect(s.usuario.nombre, 'Ana');
+    expect(s.usuario.nametag, 'Ana');
   });
 
   test('borrarCuenta manda el Bearer y acepta 204', () async {
@@ -81,18 +76,18 @@ void main() {
         (_) async => _json(401, {
           'error': {
             'code': 'credenciales_invalidas',
-            'message': 'Correo o contraseña incorrectos.',
+            'message': 'Nametag o contraseña incorrectos.',
           },
         }),
       ),
     );
 
     final e = await _falla(
-      () => api.iniciarSesion(email: 'a@b.co', password: 'x'),
+      () => api.iniciarSesion(nametag: 'Ana', password: 'x'),
     );
     expect(e.status, 401);
     expect(e.code, 'credenciales_invalidas');
-    expect(e.message, 'Correo o contraseña incorrectos.');
+    expect(e.message, 'Nametag o contraseña incorrectos.');
   });
 
   test('errores de validación traen los campos', () async {
@@ -108,9 +103,7 @@ void main() {
       ),
     );
 
-    final e = await _falla(
-      () => api.registrar(email: 'a@b.co', nombre: 'Ana', password: 'x'),
-    );
+    final e = await _falla(() => api.registrar(nametag: 'Ana', password: 'x'));
     expect(e.campos, {'password': 'Muy corta.'});
   });
 
@@ -128,7 +121,7 @@ void main() {
     );
 
     final e = await _falla(
-      () => api.iniciarSesion(email: 'a@b.co', password: 'x'),
+      () => api.iniciarSesion(nametag: 'Ana', password: 'x'),
     );
     expect(e.reintentarEnSegundos, 600);
     expect(e.mensajeParaUsuario, contains('10 minutos'));
@@ -137,7 +130,7 @@ void main() {
   test('sin red → AuthException.red', () async {
     final api = _api(MockClient((_) async => throw http.ClientException('x')));
     final e = await _falla(
-      () => api.iniciarSesion(email: 'a@b.co', password: 'x'),
+      () => api.iniciarSesion(nametag: 'Ana', password: 'x'),
     );
     expect(e.code, 'sin_conexion');
     expect(e.status, 0);
@@ -146,7 +139,7 @@ void main() {
   test('respuesta que no es JSON → respuesta_inesperada', () async {
     final api = _api(MockClient((_) async => http.Response('<html>', 502)));
     final e = await _falla(
-      () => api.iniciarSesion(email: 'a@b.co', password: 'x'),
+      () => api.iniciarSesion(nametag: 'Ana', password: 'x'),
     );
     expect(e.code, 'respuesta_inesperada');
   });
@@ -154,7 +147,7 @@ void main() {
   test('éxito con JSON incompleto → respuesta_inesperada', () async {
     final api = _api(MockClient((_) async => _json(200, {'foo': 1})));
     final e = await _falla(
-      () => api.iniciarSesion(email: 'a@b.co', password: 'x'),
+      () => api.iniciarSesion(nametag: 'Ana', password: 'x'),
     );
     expect(e.code, 'respuesta_inesperada');
   });

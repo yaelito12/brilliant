@@ -17,8 +17,7 @@ Future<List<AuthState>> _correr(AuthBloc bloc, AuthEvent evento) async {
   return estados;
 }
 
-AuthEvent _login() =>
-    AuthLoginSolicitado(email: 'ana@example.com', password: 'x');
+AuthEvent _login() => AuthLoginSolicitado(nametag: 'Ana', password: 'x');
 
 void main() {
   late ({FakeApi api, AuthBloc bloc, dynamic almacen}) t;
@@ -62,29 +61,22 @@ void main() {
     t.api.onLogin = () async => throw errorApi(
       401,
       'credenciales_invalidas',
-      'Correo o contraseña incorrectos.',
+      'Nametag o contraseña incorrectos.',
     );
     final s = await _correr(t.bloc, _login());
     expect(s.last.estado, AuthEstado.noAutenticado);
-    expect(s.last.error, 'Correo o contraseña incorrectos.');
+    expect(s.last.error, 'Nametag o contraseña incorrectos.');
     expect(s.last.cargando, isFalse);
   });
 
-  test('registro con correo repetido marca el campo email', () async {
-    t.api.onRegistro = () async => throw errorApi(
-      409,
-      'email_en_uso',
-      'Ya existe una cuenta con ese correo.',
-    );
+  test('registro con nametag repetido marca el campo nametag', () async {
+    t.api.onRegistro = () async =>
+        throw errorApi(409, 'nametag_en_uso', 'Ese nametag ya está en uso.');
     final s = await _correr(
       t.bloc,
-      AuthRegistroSolicitado(
-        email: 'ana@example.com',
-        nombre: 'Ana',
-        password: 'clave-larga-123',
-      ),
+      AuthRegistroSolicitado(nametag: 'Ana', password: 'clave-larga-123'),
     );
-    expect(s.last.errores['email'], contains('Ya existe'));
+    expect(s.last.errores['nametag'], contains('ya está en uso'));
     expect(s.last.error, isNull);
   });
 
@@ -97,11 +89,7 @@ void main() {
     );
     final s = await _correr(
       t.bloc,
-      AuthRegistroSolicitado(
-        email: 'a@b.co',
-        nombre: 'Ana',
-        password: 'clave-larga-123',
-      ),
+      AuthRegistroSolicitado(nametag: 'Ana', password: 'clave-larga-123'),
     );
     expect(s.last.errores, {'password': 'Muy fácil.'});
   });

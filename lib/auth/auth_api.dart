@@ -21,26 +21,25 @@ class AuthApi {
        _client = client ?? http.Client();
 
   Future<Sesion> registrar({
-    required String email,
-    required String nombre,
+    required String nametag,
     required String password,
   }) async {
     final json = await _enviar(
       'POST',
       '/auth/register',
-      cuerpo: {'email': email, 'nombre': nombre, 'password': password},
+      cuerpo: {'nametag': nametag, 'password': password},
     );
     return _sesion(json);
   }
 
   Future<Sesion> iniciarSesion({
-    required String email,
+    required String nametag,
     required String password,
   }) async {
     final json = await _enviar(
       'POST',
       '/auth/login',
-      cuerpo: {'email': email, 'password': password},
+      cuerpo: {'nametag': nametag, 'password': password},
     );
     return _sesion(json);
   }

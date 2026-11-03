@@ -18,15 +18,13 @@ class RegisterPage extends StatefulWidget {
 
 class _RegisterPageState extends State<RegisterPage> {
   final _form = GlobalKey<FormState>();
-  final _nombre = TextEditingController();
-  final _email = TextEditingController();
+  final _nametag = TextEditingController();
   final _password = TextEditingController();
   final _confirmar = TextEditingController();
 
   @override
   void dispose() {
-    _nombre.dispose();
-    _email.dispose();
+    _nametag.dispose();
     _password.dispose();
     _confirmar.dispose();
     super.dispose();
@@ -36,8 +34,7 @@ class _RegisterPageState extends State<RegisterPage> {
     if (!_form.currentState!.validate()) return;
     context.read<AuthBloc>().add(
       AuthRegistroSolicitado(
-        email: _email.text.trim(),
-        nombre: _nombre.text.trim(),
+        nametag: _nametag.text.trim(),
         password: _password.text,
       ),
     );
@@ -65,42 +62,27 @@ class _RegisterPageState extends State<RegisterPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     TextFormField(
-                      controller: _nombre,
+                      controller: _nametag,
                       enabled: !state.cargando,
-                      textInputAction: TextInputAction.next,
-                      autofillHints: const [AutofillHints.nickname],
-                      textCapitalization: TextCapitalization.words,
-                      validator: validarNombre,
-                      forceErrorText: state.errores['nombre'],
-                      onChanged: _alEscribir,
-                      decoration: const InputDecoration(
-                        labelText: 'Nombre',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.person_outline),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _email,
-                      enabled: !state.cargando,
-                      keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
                       autofillHints: const [AutofillHints.newUsername],
                       autocorrect: false,
-                      validator: validarEmail,
-                      forceErrorText: state.errores['email'],
+                      enableSuggestions: false,
+                      validator: validarNametag,
+                      forceErrorText: state.errores['nametag'],
                       onChanged: _alEscribir,
                       decoration: const InputDecoration(
-                        labelText: 'Correo electrónico',
+                        labelText: 'Nametag',
+                        helperText: '3 a 20 caracteres: letras, números, . - _',
                         border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.email_outlined),
+                        prefixIcon: Icon(Icons.person_outline),
                       ),
                     ),
                     const SizedBox(height: 16),
                     CampoPassword(
                       controller: _password,
                       etiqueta: 'Contraseña',
-                      ayuda: 'Mínimo 10 caracteres.',
+                      ayuda: 'Mínimo 6 caracteres.',
                       habilitado: !state.cargando,
                       autofill: const [AutofillHints.newPassword],
                       accion: TextInputAction.next,

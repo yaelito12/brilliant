@@ -3,7 +3,7 @@ import 'package:brilliant/auth/auth_models.dart';
 import 'package:brilliant/auth/auth_repository.dart';
 import 'package:brilliant/auth/token_storage.dart';
 
-const usuarioAna = Usuario(id: 'u1', email: 'ana@example.com', nombre: 'Ana');
+const usuarioAna = Usuario(id: 'u1', nametag: 'Ana');
 
 Sesion sesion({int n = 1, int expiresIn = 900}) => Sesion(
   accessToken: 'access-$n',
@@ -28,8 +28,7 @@ class FakeApi extends AuthApi {
 
   @override
   Future<Sesion> registrar({
-    required String email,
-    required String nombre,
+    required String nametag,
     required String password,
   }) {
     llamadas.add('registrar');
@@ -38,7 +37,7 @@ class FakeApi extends AuthApi {
 
   @override
   Future<Sesion> iniciarSesion({
-    required String email,
+    required String nametag,
     required String password,
   }) {
     llamadas.add('login');

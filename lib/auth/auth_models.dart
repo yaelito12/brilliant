@@ -1,26 +1,20 @@
 /// Datos públicos de la cuenta (el servidor nunca manda la contraseña).
+/// El [nametag] es el nombre con el que se inicia sesión y que ven los demás.
 class Usuario {
   final String id;
-  final String email;
-  final String nombre;
+  final String nametag;
 
-  const Usuario({required this.id, required this.email, required this.nombre});
+  const Usuario({required this.id, required this.nametag});
 
-  factory Usuario.fromJson(Map<String, dynamic> json) => Usuario(
-    id: json['id'] as String,
-    email: json['email'] as String,
-    nombre: json['nombre'] as String,
-  );
+  factory Usuario.fromJson(Map<String, dynamic> json) =>
+      Usuario(id: json['id'] as String, nametag: json['nametag'] as String);
 
   @override
   bool operator ==(Object other) =>
-      other is Usuario &&
-      other.id == id &&
-      other.email == email &&
-      other.nombre == nombre;
+      other is Usuario && other.id == id && other.nametag == nametag;
 
   @override
-  int get hashCode => Object.hash(id, email, nombre);
+  int get hashCode => Object.hash(id, nametag);
 }
 
 /// Respuesta del servidor al registrarse, iniciar sesión o renovar.
@@ -50,11 +44,11 @@ class AuthException implements Exception {
   /// Código HTTP; 0 si ni siquiera hubo respuesta.
   final int status;
 
-  /// Código estable del servidor (`credenciales_invalidas`, `email_en_uso`...).
+  /// Código estable del servidor (`credenciales_invalidas`, `nametag_en_uso`...).
   final String code;
   final String message;
 
-  /// Errores por campo cuando el servidor rechaza los datos (`email`, `password`...).
+  /// Errores por campo cuando el servidor rechaza los datos (`nametag`, `password`).
   final Map<String, String> campos;
   final int? reintentarEnSegundos;
 

@@ -35,7 +35,7 @@ Future<FakeApi> abrir(WidgetTester tester) async {
 Finder campo(int i) => find.byType(TextFormField).at(i);
 
 Future<void> iniciarSesion(WidgetTester tester) async {
-  await tester.enterText(campo(0), 'ana@example.com');
+  await tester.enterText(campo(0), 'Ana');
   await tester.enterText(campo(1), 'clave-larga-123');
   await tester.tap(find.text('Entrar'));
   await tester.pumpAndSettle();
@@ -54,7 +54,7 @@ void main() {
     final api = await abrir(tester);
     await tester.tap(find.text('Entrar'));
     await tester.pump();
-    expect(find.text('Escribe tu correo.'), findsOneWidget);
+    expect(find.text('Escribe tu nametag.'), findsOneWidget);
     expect(find.text('Escribe tu contraseña.'), findsOneWidget);
     expect(api.llamadas, isEmpty);
   });
@@ -73,10 +73,10 @@ void main() {
     api.onLogin = () async => throw errorApi(
       401,
       'credenciales_invalidas',
-      'Correo o contraseña incorrectos.',
+      'Nametag o contraseña incorrectos.',
     );
     await iniciarSesion(tester);
-    expect(find.text('Correo o contraseña incorrectos.'), findsOneWidget);
+    expect(find.text('Nametag o contraseña incorrectos.'), findsOneWidget);
     expect(find.text('Elige un mapa'), findsNothing);
   });
 
@@ -87,39 +87,34 @@ void main() {
     expect(find.text('Crea tu cuenta'), findsOneWidget);
 
     await tester.enterText(campo(0), 'Ana');
-    await tester.enterText(campo(1), 'ana@example.com');
-    await tester.enterText(campo(2), 'clave-larga-123');
-    await tester.enterText(campo(3), 'otra-distinta-123');
+    await tester.enterText(campo(1), 'clave-larga-123');
+    await tester.enterText(campo(2), 'otra-distinta-123');
     await tester.tap(find.text('Crear cuenta'));
     await tester.pump();
     expect(find.text('Las contraseñas no coinciden.'), findsOneWidget);
     expect(api.llamadas, isEmpty);
 
-    await tester.enterText(campo(3), 'clave-larga-123');
+    await tester.enterText(campo(2), 'clave-larga-123');
     await tester.tap(find.text('Crear cuenta'));
     await tester.pumpAndSettle();
     expect(api.llamadas, ['registrar']);
     expect(find.text('Elige un mapa'), findsOneWidget);
   });
 
-  testWidgets('crear cuenta con correo repetido marca el campo', (
+  testWidgets('crear cuenta con nametag repetido marca el campo', (
     tester,
   ) async {
     final api = await abrir(tester);
-    api.onRegistro = () async => throw errorApi(
-      409,
-      'email_en_uso',
-      'Ya existe una cuenta con ese correo.',
-    );
+    api.onRegistro = () async =>
+        throw errorApi(409, 'nametag_en_uso', 'Ese nametag ya está en uso.');
     await tester.tap(find.text('¿No tienes cuenta? Crea una'));
     await tester.pumpAndSettle();
     await tester.enterText(campo(0), 'Ana');
-    await tester.enterText(campo(1), 'ana@example.com');
+    await tester.enterText(campo(1), 'clave-larga-123');
     await tester.enterText(campo(2), 'clave-larga-123');
-    await tester.enterText(campo(3), 'clave-larga-123');
     await tester.tap(find.text('Crear cuenta'));
     await tester.pumpAndSettle();
-    expect(find.text('Ya existe una cuenta con ese correo.'), findsOneWidget);
+    expect(find.text('Ese nametag ya está en uso.'), findsOneWidget);
   });
 
   testWidgets('cerrar sesión vuelve al login', (tester) async {

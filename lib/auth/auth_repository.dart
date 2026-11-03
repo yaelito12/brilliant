@@ -22,24 +22,19 @@ class AuthRepository {
        _ahora = ahora ?? DateTime.now;
 
   Future<Usuario> registrar({
-    required String email,
-    required String nombre,
+    required String nametag,
     required String password,
   }) async {
-    final s = await _api.registrar(
-      email: email,
-      nombre: nombre,
-      password: password,
-    );
+    final s = await _api.registrar(nametag: nametag, password: password);
     await _guardar(s);
     return s.usuario;
   }
 
   Future<Usuario> iniciarSesion({
-    required String email,
+    required String nametag,
     required String password,
   }) async {
-    final s = await _api.iniciarSesion(email: email, password: password);
+    final s = await _api.iniciarSesion(nametag: nametag, password: password);
     await _guardar(s);
     return s.usuario;
   }

@@ -45,15 +45,18 @@ class MenuCuenta extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      usuario.nombre,
+                      'Sesión iniciada como',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    Text(
+                      usuario.nametag,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         color: colorTextoAuth,
                       ),
-                    ),
-                    Text(
-                      usuario.email,
-                      style: TextStyle(color: Colors.grey.shade700),
                     ),
                   ],
                 ),

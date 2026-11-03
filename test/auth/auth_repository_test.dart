@@ -9,7 +9,7 @@ void main() {
     final t = crearRepo();
     t.api.onLogin = () async => sesion();
 
-    final u = await t.repo.iniciarSesion(email: 'a', password: 'b');
+    final u = await t.repo.iniciarSesion(nametag: 'a', password: 'b');
 
     expect(u, usuarioAna);
     expect(await t.almacen.leerRefreshToken(), 'refresh-1');
@@ -52,7 +52,7 @@ void main() {
   test('cerrar sesión limpia lo local aunque el servidor falle', () async {
     final t = crearRepo();
     t.api.onLogin = () async => sesion();
-    await t.repo.iniciarSesion(email: 'a', password: 'b');
+    await t.repo.iniciarSesion(nametag: 'a', password: 'b');
     t.api.onLogout = () async => throw const AuthException.red();
 
     await t.repo.cerrarSesion();
@@ -65,7 +65,7 @@ void main() {
     final t = crearRepo();
     t.api.onLogin = () async => sesion();
     t.api.onBorrar = (_, __) async {};
-    await t.repo.iniciarSesion(email: 'a', password: 'b');
+    await t.repo.iniciarSesion(nametag: 'a', password: 'b');
 
     await t.repo.borrarCuenta('clave');
 
@@ -78,7 +78,7 @@ void main() {
     t.api.onLogin = () async => sesion();
     t.api.onRefresh = (_) async => sesion(n: 2);
     t.api.onBorrar = (_, __) async {};
-    await t.repo.iniciarSesion(email: 'a', password: 'b');
+    await t.repo.iniciarSesion(nametag: 'a', password: 'b');
     t.reloj.avanzar(const Duration(minutes: 20)); // pasó la vida del token
 
     await t.repo.borrarCuenta('clave');
@@ -96,7 +96,7 @@ void main() {
       t.api.onBorrar = (token, _) async {
         if (++intentos == 1) throw errorApi(401, 'no_autenticado');
       };
-      await t.repo.iniciarSesion(email: 'a', password: 'b');
+      await t.repo.iniciarSesion(nametag: 'a', password: 'b');
 
       await t.repo.borrarCuenta('clave');
 
@@ -111,7 +111,7 @@ void main() {
       t.api.onLogin = () async => sesion();
       t.api.onBorrar = (_, __) async =>
           throw errorApi(403, 'password_incorrecta');
-      await t.repo.iniciarSesion(email: 'a', password: 'b');
+      await t.repo.iniciarSesion(nametag: 'a', password: 'b');
 
       await expectLater(
         t.repo.borrarCuenta('mala'),
@@ -139,7 +139,7 @@ void main() {
     final t = crearRepo();
     t.api.onLogin = () async => sesion();
     t.api.onRefresh = (_) async => sesion(n: 2);
-    await t.repo.iniciarSesion(email: 'a', password: 'b');
+    await t.repo.iniciarSesion(nametag: 'a', password: 'b');
 
     expect(await t.repo.tokenDeAcceso(), 'access-1');
     expect(t.api.llamadas, ['login']); // sin llamadas extra

@@ -12,7 +12,7 @@ class AuthState {
   /// Mensaje de error general (se muestra en un recuadro rojo).
   final String? error;
 
-  /// Errores por campo que mandó el servidor (`email`, `password`, `nombre`).
+  /// Errores por campo que mandó el servidor (`nametag`, `password`).
   final Map<String, String> errores;
 
   /// Aviso informativo (por ejemplo "Tu cuenta fue eliminada.").

@@ -4,20 +4,15 @@ abstract class AuthEvent {}
 class AuthIniciada extends AuthEvent {}
 
 class AuthRegistroSolicitado extends AuthEvent {
-  final String email;
-  final String nombre;
+  final String nametag;
   final String password;
-  AuthRegistroSolicitado({
-    required this.email,
-    required this.nombre,
-    required this.password,
-  });
+  AuthRegistroSolicitado({required this.nametag, required this.password});
 }
 
 class AuthLoginSolicitado extends AuthEvent {
-  final String email;
+  final String nametag;
   final String password;
-  AuthLoginSolicitado({required this.email, required this.password});
+  AuthLoginSolicitado({required this.nametag, required this.password});
 }
 
 class AuthLogoutSolicitado extends AuthEvent {}

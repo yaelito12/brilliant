@@ -35,17 +35,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   Future<void> _onRegistro(AuthRegistroSolicitado e, Emitter<AuthState> emit) =>
       _entrar(
         emit,
-        () => _repo.registrar(
-          email: e.email,
-          nombre: e.nombre,
-          password: e.password,
-        ),
+        () => _repo.registrar(nametag: e.nametag, password: e.password),
       );
 
   Future<void> _onLogin(AuthLoginSolicitado e, Emitter<AuthState> emit) =>
       _entrar(
         emit,
-        () => _repo.iniciarSesion(email: e.email, password: e.password),
+        () => _repo.iniciarSesion(nametag: e.nametag, password: e.password),
       );
 
   /// Registro e inicio de sesión comparten el mismo manejo de errores.
@@ -60,8 +56,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     } on AuthException catch (ex) {
       if (ex.code == 'validacion') {
         emit(AuthState.noAutenticado(errores: ex.campos));
-      } else if (ex.code == 'email_en_uso') {
-        emit(AuthState.noAutenticado(errores: {'email': ex.message}));
+      } else if (ex.code == 'nametag_en_uso') {
+        emit(AuthState.noAutenticado(errores: {'nametag': ex.message}));
       } else {
         emit(AuthState.noAutenticado(error: ex.mensajeParaUsuario));
       }
