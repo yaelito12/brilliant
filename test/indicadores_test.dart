@@ -2,10 +2,8 @@
 // de la regla, puntos del 1º, 2º y 3º y palomita al llenar la zona.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:brilliant/niveles.dart';
-import 'package:brilliant/tablero.dart';
+import 'package:brilliant_reglas/brilliant_reglas.dart';
 import 'package:brilliant/tablero_ui.dart';
-import 'package:brilliant/tipo.dart';
 
 import 'helpers/widget_helpers.dart';
 

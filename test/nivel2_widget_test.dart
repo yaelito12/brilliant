@@ -2,11 +2,9 @@
 // dibuja (con la zona gris), sus casillas iniciales y una partida corta.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:brilliant/nivel2.dart';
-import 'package:brilliant/tablero.dart';
+import 'package:brilliant_reglas/brilliant_reglas.dart';
 import 'package:brilliant/menu_mapas.dart';
 import 'package:brilliant/tablero_ui.dart';
-import 'package:brilliant/tipo.dart';
 
 import 'helpers/widget_helpers.dart';
 

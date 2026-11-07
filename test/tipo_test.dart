@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:brilliant/tipo.dart';
+import 'package:brilliant_reglas/brilliant_reglas.dart';
+import 'package:brilliant/tablero_ui.dart' show colorDeTipo;
 
 void main() {
   group('TipoVerde', () {
@@ -171,7 +172,7 @@ void main() {
     });
 
     test('las dos naranjas comparten color', () {
-      expect(tipo.color, TipoNaranjaBajo().color);
+      expect(colorDeTipo(tipo), colorDeTipo(TipoNaranjaBajo()));
     });
   });
 

@@ -7,6 +7,9 @@ environment:
   sdk: ^3.9.0
 
 dependencies:
+  # Reglas del juego compartidas con la app (para validar jugadas).
+  brilliant_reglas:
+    path: ../packages/brilliant_reglas
   crypto: ^3.0.6
   pointycastle: ^4.0.0
   shelf: ^1.4.2

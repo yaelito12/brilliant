@@ -1,10 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:brilliant/tablero.dart';
-import 'package:brilliant/nivel1.dart';
-import 'package:brilliant/tipo.dart';
-import 'package:brilliant/zona.dart';
+import 'package:brilliant_reglas/brilliant_reglas.dart';
 import 'package:brilliant/bloc/partida_bloc.dart';
 import 'package:brilliant/bloc/partida_event.dart';
 

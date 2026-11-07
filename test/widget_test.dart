@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:brilliant/main.dart';
-import 'package:brilliant/nivel1.dart';
+import 'package:brilliant_reglas/brilliant_reglas.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:brilliant/bloc/partida_bloc.dart';
 import 'package:brilliant/bloc/partida_event.dart';

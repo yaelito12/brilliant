@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:bloc/bloc.dart';
-import '../tablero.dart';
+import 'package:brilliant_reglas/brilliant_reglas.dart';
 import 'partida_event.dart';
 import 'partida_state.dart';
 
@@ -52,7 +52,7 @@ class PartidaBloc extends Bloc<PartidaEvent, PartidaState> {
   /// Si sale doble no hace falta elegir: el ancla y el otro número son iguales.
   PartidaState _tirarDados(PartidaState base) {
     final dados = [_random.nextInt(6) + 1, _random.nextInt(6) + 1];
-    final anclas = _anclasPosibles(base.tablero!, base.celdas, dados);
+    final anclas = anclasPosibles(base.tablero!, base.celdas, dados);
     final esDoble = dados[0] == dados[1];
     final prefijo = 'Turno ${base.turno}: salió ${dados[0]} y ${dados[1]}.';
 
@@ -75,7 +75,7 @@ class PartidaBloc extends Bloc<PartidaEvent, PartidaState> {
       return;
     }
 
-    final numero = _otroDado(dados, event.valor);
+    final numero = otroDado(dados, event.valor);
     final hayAnclas = state.anclasPosibles.any((c) => state.celdas[c] == event.valor);
 
     emit(state.copyWith(
@@ -111,13 +111,13 @@ class PartidaBloc extends Bloc<PartidaEvent, PartidaState> {
       return;
     }
 
-    final numero = _otroDado(dados, valorCasilla);
+    final numero = otroDado(dados, valorCasilla);
     emit(state.copyWith(
       valorAncla: () => valorCasilla,
       numeroAColocar: () => numero,
       ancla: () => event.coordenada,
       destinosPosibles:
-          _destinos(state.tablero!, state.celdas, event.coordenada, numero),
+          destinosPosibles(state.tablero!, state.celdas, event.coordenada, numero),
       mensaje: 'Coloca el $numero en una casilla marcada.',
     ));
   }
@@ -159,36 +159,5 @@ class PartidaBloc extends Bloc<PartidaEvent, PartidaState> {
       destinosPosibles: const {},
       numeroColocado: false,
     ));
-  }
-
-  /// Valor que se coloca si el ancla tiene [valorAncla]: el del otro dado.
-  int _otroDado(List<int> dados, int valorAncla) {
-    return valorAncla == dados[0] ? dados[1] : dados[0];
-  }
-
-  Set<Coordenada> _anclasPosibles(
-    Tablero tablero,
-    Map<Coordenada, int> celdas,
-    List<int> dados,
-  ) {
-    return celdas.entries
-        .where((e) => dados.contains(e.value))
-        .where((e) => _destinos(tablero, celdas, e.key, _otroDado(dados, e.value))
-            .isNotEmpty)
-        .map((e) => e.key)
-        .toSet();
-  }
-
-  Set<Coordenada> _destinos(
-    Tablero tablero,
-    Map<Coordenada, int> celdas,
-    Coordenada ancla,
-    int numero,
-  ) {
-    return tablero
-        .vecinos(ancla)
-        .where((c) => !celdas.containsKey(c))
-        .where((c) => tablero.zonaEn(c)?.puedeAgregar(numero) ?? false)
-        .toSet();
   }
 }

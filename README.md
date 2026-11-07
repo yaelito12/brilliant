@@ -4,6 +4,7 @@ Juego de tablero en Flutter con cuentas de usuario.
 
 - **App (Flutter)**: carpeta raíz. Pantallas de crear cuenta, iniciar sesión, cerrar sesión y borrar cuenta.
 - **Servidor (Dart)**: carpeta [`server/`](server/README.md). Programa aparte donde se registran los clientes.
+- **Reglas del juego (Dart puro)**: carpeta [`packages/brilliant_reglas/`](packages/brilliant_reglas/). Tipos de zona, tablero, niveles y reglas de cada turno; las usan la app y el servidor, así el multijugador valida las jugadas con el mismo código.
 
 ## Cómo ejecutarlo
 
@@ -25,6 +26,7 @@ Juego de tablero en Flutter con cuentas de usuario.
 
 ```bash
 cd server && dart test   # servidor: 22 pruebas
+cd packages/brilliant_reglas && dart test   # reglas del juego: 9 pruebas
 flutter test              # app: incluye test/auth/
 ```
 

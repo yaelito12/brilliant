@@ -38,6 +38,9 @@ dependencies:
   bloc: ^9.2.1
   http: ^1.2.0
   flutter_secure_storage: ^9.2.0
+  # Reglas del juego compartidas con el servidor (Dart puro).
+  brilliant_reglas:
+    path: packages/brilliant_reglas
 
 dev_dependencies:
   flutter_test:

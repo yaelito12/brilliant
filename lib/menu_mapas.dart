@@ -2,9 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
-import 'nivel.dart';
-import 'niveles.dart';
-import 'tablero.dart';
+import 'package:brilliant_reglas/brilliant_reglas.dart';
 import 'tablero_ui.dart';
 
 const _colorTexto = Color(0xFF1B3B4D);
