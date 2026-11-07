@@ -396,4 +396,145 @@ void main() {
       expect(await ana.esperarCierre(), CodigoCierre.protocolo);
     });
   });
+
+  partidaPorWebSocket();
+}
+
+/// Iniciales válidos del nivel 1.
+const iniciales1 = [[0, 2, 1], [1, 5, 2], [3, 1, 3], [3, 4, 4], [5, 2, 5], [6, 4, 6]];
+
+/// Espera un estado de partida que cumpla [cond].
+Future<Msg> esperarPartida(Cliente c, bool Function(Msg p) cond, {String que = 'partida'}) async =>
+    (await c.esperarQue((m) => m['tipo'] == 'partida' && cond(m['partida'] as Msg), que: que))['partida']
+        as Msg;
+
+Msg jugadorP(Msg partida, String nametag) => (partida['jugadores'] as List)
+    .cast<Msg>()
+    .firstWhere((j) => j['nametag'] == nametag, orElse: () => {});
+
+/// Sala con [clientes] (nivel 1), todos listos y con sus iniciales puestos.
+/// Devuelve el código; la partida queda en la ronda 1.
+Future<String> partidaEnRonda1(List<Cliente> clientes) async {
+  final codigo = await salaCon(clientes.first, clientes.sublist(1));
+  for (final c in clientes) {
+    c.enviar({'tipo': 'listo', 'listo': true});
+  }
+  for (final c in clientes) {
+    await esperarPartida(c, (p) => p['fase'] == 'iniciales');
+    c.enviar({'tipo': 'iniciales', 'valores': iniciales1});
+  }
+  for (final c in clientes) {
+    await esperarPartida(c, (p) => p['fase'] == 'jugando' && p['ronda'] == 1);
+  }
+  return codigo;
+}
+
+void partidaPorWebSocket() {
+  group('partida', () {
+    test('flujo completo: iniciales, rondas, conceder y vuelta al lobby', () async {
+      final ana = await Cliente.de('Ana');
+      final beto = await Cliente.de('Beto');
+      final codigo = await partidaEnRonda1([ana, beto]);
+
+      final p = lobby.sala(codigo)!.partida!;
+      expect(p.dados, hasLength(2));
+      expect(jugadorP(p.toJson().cast(), 'Ana')['celdas'], hasLength(6));
+
+      // Jugada inválida: error solo para quien la mandó.
+      ana.enviar({'tipo': 'jugada', 'ancla': [0, 0], 'destino': [0, 1]});
+      await ana.esperarError('jugada_invalida');
+
+      ana.enviar({'tipo': 'pasar'});
+      beto.enviar({'tipo': 'pasar'});
+      await esperarPartida(ana, (p) => p['ronda'] == 2, que: 'ronda 2');
+
+      ana.enviar({'tipo': 'conceder'});
+      for (final c in [ana, beto]) {
+        final fin = await c.esperar('partida_terminada');
+        expect(fin['motivo'], 'rendicion');
+        expect((fin['resultados'] as List).first['nametag'], 'Beto');
+        // La sala vuelve al lobby para la revancha, sin nadie listo.
+        final s = await c.esperarSala((s) => s['estado'] == 'lobby');
+        expect(jugadores(s).every((j) => j['listo'] == false), isTrue);
+      }
+      expect(lobby.sala(codigo)!.partida, isNull);
+    });
+
+    test('mensajes de juego sin partida', () async {
+      final ana = await Cliente.de('Ana');
+      ana.enviar({'tipo': 'pasar'});
+      await ana.esperarError('sin_partida');
+      ana.enviar({'tipo': 'crear_sala', 'nivel': 1});
+      await ana.esperarSala((_) => true);
+      ana.enviar({'tipo': 'conceder'});
+      await ana.esperarError('sin_partida');
+    });
+
+    test('se cae en plena partida: no frena a nadie y al volver sigue donde iba', () async {
+      final ana = await Cliente.de('Ana');
+      var beto = await Cliente.de('Beto');
+      final codigo = await partidaEnRonda1([ana, beto]);
+
+      await beto.cerrar();
+      await esperarPartida(ana, (p) => jugadorP(p, 'Beto')['conectado'] == false);
+
+      ana.enviar({'tipo': 'pasar'});
+      await esperarPartida(ana, (p) => p['ronda'] == 2, que: 'avanza sin Beto');
+
+      beto = await Cliente.abrir();
+      beto.enviar({'tipo': 'auth', 'token': await token('Beto')});
+      final auth = await beto.esperar('autenticado');
+      expect(auth['sala']['estado'], 'jugando');
+      final estado = await esperarPartida(beto, (p) => jugadorP(p, 'Beto')['conectado'] == true);
+      expect(estado['ronda'], 2);
+      expect(jugadorP(estado, 'Beto')['celdas'], hasLength(6), reason: 'conserva su tablero');
+      expect(lobby.sala(codigo)!.partida!.jugador(lobby.sala(codigo)!.jugadores[1].id)!.activo, isTrue);
+
+      // Puede seguir jugando.
+      beto.enviar({'tipo': 'pasar'});
+      ana.enviar({'tipo': 'pasar'});
+      await esperarPartida(beto, (p) => p['ronda'] == 3, que: 'ronda 3');
+    });
+
+    test('si no vuelve a tiempo cuenta como abandono y gana el otro', () async {
+      final ana = await Cliente.de('Ana');
+      final beto = await Cliente.de('Beto');
+      final codigo = await partidaEnRonda1([ana, beto]);
+
+      await beto.cerrar();
+      final fin = await ana.esperar('partida_terminada');
+      expect(fin['motivo'], 'abandono');
+      final res = (fin['resultados'] as List).cast<Msg>();
+      expect(res.map((r) => [r['nametag'], r['posicion'], r['estado']]), [
+        ['Ana', 1, 'jugando'],
+        ['Beto', 2, 'abandono'],
+      ]);
+      final s = await ana.esperarSala((s) => jugadores(s).length == 1);
+      expect(s['estado'], 'lobby');
+      expect(lobby.sala(codigo)!.jugadores.single.nametag, 'Ana');
+    });
+
+    test('con 3 jugadores, si uno abandona los demás siguen', () async {
+      final ana = await Cliente.de('Ana');
+      final beto = await Cliente.de('Beto');
+      final carla = await Cliente.de('Carla');
+      final codigo = await partidaEnRonda1([ana, beto, carla]);
+
+      await carla.cerrar();
+      await esperarPartida(ana, (p) => jugadorP(p, 'Carla')['estado'] == 'abandono', que: 'abandono');
+      expect(lobby.sala(codigo)!.partida!.fase, FasePartida.jugando);
+    });
+
+    test('salir de la sala en plena partida es conceder', () async {
+      final ana = await Cliente.de('Ana');
+      final beto = await Cliente.de('Beto');
+      await partidaEnRonda1([ana, beto]);
+
+      beto.enviar({'tipo': 'salir'});
+      await beto.esperar('saliste');
+      final fin = await ana.esperar('partida_terminada');
+      expect(fin['motivo'], 'rendicion');
+      expect((fin['resultados'] as List).last, containsPair('estado', 'concedio'));
+    });
+  });
 }

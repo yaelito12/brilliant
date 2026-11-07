@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../app.dart' show Usuario;
+import 'partida.dart';
 
 enum EstadoSala { lobby, jugando }
 
@@ -38,6 +39,9 @@ class Sala {
 
   /// En orden de llegada.
   final List<JugadorSala> jugadores = [];
+
+  /// La partida en curso (solo con [estado] == jugando).
+  Partida? partida;
 
   Sala({
     required this.codigo,

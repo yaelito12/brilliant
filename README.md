@@ -25,7 +25,7 @@ Juego de tablero en Flutter con cuentas de usuario.
 ## Pruebas
 
 ```bash
-cd server && dart test   # servidor: 39 pruebas
+cd server && dart test   # servidor: 57 pruebas
 cd packages/brilliant_reglas && dart test   # reglas del juego: 9 pruebas
 flutter test              # app: incluye test/auth/
 ```

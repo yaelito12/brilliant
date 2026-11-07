@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:brilliant_reglas/brilliant_reglas.dart' show nivelPorNumero;
 
 import '../app.dart' show Usuario;
+import 'partida.dart';
 import 'protocolo.dart';
 import 'sala.dart';
 
@@ -33,6 +34,9 @@ class ConfigMultijugador {
   final int maxBytesMensaje;
   final int maxMensajesPorSegundo;
 
+  /// Tiempos y límite de rondas de cada partida.
+  final ConfigPartida partida;
+
   const ConfigMultijugador({
     this.minJugadores = 2,
     this.maxJugadores = 6,
@@ -41,31 +45,38 @@ class ConfigMultijugador {
     this.intervaloPing = const Duration(seconds: 15),
     this.maxBytesMensaje = 4096,
     this.maxMensajesPorSegundo = 20,
+    this.partida = const ConfigPartida(),
   });
 
   factory ConfigMultijugador.desdeEnv(Map<String, String> env) {
-    final gracia = int.tryParse(env['RECONNECT_GRACE_SECONDS'] ?? '');
+    int valor(String clave, int porDefecto) {
+      final n = int.tryParse(env[clave] ?? '');
+      return n != null && n > 0 ? n : porDefecto;
+    }
+
     return ConfigMultijugador(
-      graciaReconexion: Duration(seconds: gracia != null && gracia > 0 ? gracia : 30),
+      graciaReconexion: Duration(seconds: valor('RECONNECT_GRACE_SECONDS', 30)),
+      partida: ConfigPartida(
+        tiempoIniciales: Duration(seconds: valor('INITIAL_VALUES_SECONDS', 90)),
+        tiempoTurno: Duration(seconds: valor('TURN_SECONDS', 60)),
+        maxRondas: valor('MAX_ROUNDS', 100),
+      ),
     );
   }
 }
 
 /// Salas y jugadores conectados. Toda la lógica del lobby vive aquí:
 /// crear sala, unirse con código, elegir mapa, listo, salir, desconexiones.
+/// Cuando todos están listos crea la [Partida] y le pasa los mensajes de juego.
 class Lobby {
   final ConfigMultijugador config;
-
-  /// Se llama cuando todos dieron "listo" (lo usa la partida).
-  final void Function(Sala sala)? alIniciarPartida;
-
   final Random _random;
   final _salas = <String, Sala>{};
   final _salaDe = <String, Sala>{}; // userId -> sala
   final _conexionDe = <String, Conexion>{}; // userId -> conexión activa
   final _usuarioDe = Map<Conexion, Usuario>.identity();
 
-  Lobby({this.config = const ConfigMultijugador(), this.alIniciarPartida, Random? random})
+  Lobby({this.config = const ConfigMultijugador(), Random? random})
     : _random = random ?? Random.secure();
 
   int get cantidadSalas => _salas.length;
@@ -103,7 +114,12 @@ class Lobby {
       j.temporizadorSalida?.cancel();
       j.temporizadorSalida = null;
       _difundir(sala, evento: {'tipo': 'reconectado', 'nametag': j.nametag});
+      sala.partida?.cambiarConexion(u.id, true);
     }
+    // Si hay partida en curso, se le manda el estado completo para seguir
+    // donde iba (su tablero, los dados de la ronda y si ya jugó).
+    final partida = sala?.partida;
+    if (partida != null) c.enviar({'tipo': 'partida', 'partida': partida.toJson()});
   }
 
   /// La conexión [c] se cerró (o se perdió). Si su dueño estaba en una sala,
@@ -122,10 +138,12 @@ class Lobby {
     j.temporizadorSalida?.cancel();
     j.temporizadorSalida = Timer(config.graciaReconexion, () {
       if (!j.conectado && identical(_salaDe[u.id], sala)) {
+        sala.partida?.abandonar(u.id); // en partida: cuenta como abandono
         _quitar(sala, j, motivo: 'abandono');
       }
     });
     _difundir(sala, evento: {'tipo': 'desconectado', 'nametag': j.nametag});
+    sala.partida?.cambiarConexion(u.id, false);
   }
 
   /// Procesa un mensaje del cliente. Los errores de negocio se le contestan
@@ -150,6 +168,12 @@ class Lobby {
           _salir(u, c);
         case 'ping':
           c.enviar({'tipo': 'pong'});
+        case 'iniciales' || 'jugada' || 'pasar' || 'conceder':
+          final partida = _salaDe[u.id]?.partida;
+          if (partida == null) {
+            throw ErrorProtocolo('sin_partida', 'No hay una partida en curso.');
+          }
+          partida.manejar(u.id, tipo as String, msg);
         default:
           throw ErrorProtocolo('mensaje_desconocido', 'Tipo de mensaje desconocido.');
       }
@@ -161,6 +185,7 @@ class Lobby {
   /// Cierra todo (al apagar el servidor).
   void cerrar() {
     for (final s in _salas.values) {
+      s.partida?.cancelar();
       for (final j in s.jugadores) {
         j.temporizadorSalida?.cancel();
       }
@@ -239,6 +264,7 @@ class Lobby {
     if (sala == null || j == null) {
       throw ErrorProtocolo('no_en_sala', 'No estás en ninguna sala.');
     }
+    sala.partida?.rendir(u.id); // salir en plena partida = conceder
     _quitar(sala, j, motivo: 'salio');
     c.enviar({'tipo': 'saliste'});
   }
@@ -264,6 +290,7 @@ class Lobby {
     sala.jugadores.remove(j);
     _salaDe.remove(j.id);
     if (sala.jugadores.isEmpty) {
+      sala.partida?.cancelar();
       _salas.remove(sala.codigo);
       return;
     }
@@ -276,12 +303,34 @@ class Lobby {
     if (sala.estado != EstadoSala.lobby || !sala.todosListos) return;
     sala.estado = EstadoSala.jugando;
     _difundir(sala, tipo: 'partida_iniciada');
-    alIniciarPartida?.call(sala);
+    sala.partida = Partida(
+      config: config.partida,
+      random: _random,
+      jugadores: [
+        for (final j in sala.jugadores)
+          JugadorPartida(id: j.id, nametag: j.nametag, nivel: nivelPorNumero(j.nivel)!),
+      ],
+      difundir: (msg) => _enviarATodos(sala, msg),
+      alTerminar: (_) => _finDePartida(sala),
+    )..iniciar();
+  }
+
+  /// Al terminar la partida la sala vuelve al lobby (para la revancha).
+  /// Los que abandonaron ya no están; los demás tienen que volver a dar "listo".
+  void _finDePartida(Sala sala) {
+    sala.partida = null;
+    sala.estado = EstadoSala.lobby;
+    for (final j in sala.jugadores) {
+      j.listo = false;
+    }
+    if (sala.jugadores.isNotEmpty) _difundir(sala, evento: {'tipo': 'fin_partida'});
   }
 
   /// Manda el estado de la sala a todos sus jugadores conectados.
-  void _difundir(Sala sala, {String tipo = 'sala', Map<String, Object?>? evento}) {
-    final msg = {'tipo': tipo, 'sala': sala.toJson(), 'evento': ?evento};
+  void _difundir(Sala sala, {String tipo = 'sala', Map<String, Object?>? evento}) =>
+      _enviarATodos(sala, {'tipo': tipo, 'sala': sala.toJson(), 'evento': ?evento});
+
+  void _enviarATodos(Sala sala, Map<String, Object?> msg) {
     for (final j in sala.jugadores) {
       _conexionDe[j.id]?.enviar(msg);
     }
