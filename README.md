@@ -3,15 +3,15 @@
 Juego de tablero en Flutter con cuentas de usuario.
 
 - **App (Flutter)**: carpeta raíz. Pantallas de crear cuenta, iniciar sesión, cerrar sesión y borrar cuenta.
-- **Servidor de autenticación (Node.js)**: carpeta [`server/`](server/README.md). Programa aparte donde se registran los clientes.
+- **Servidor (Dart)**: carpeta [`server/`](server/README.md). Programa aparte donde se registran los clientes.
 
 ## Cómo ejecutarlo
 
 1. Servidor (ver `server/README.md` para el detalle):
    ```bash
-   cd server && npm install && cp .env.example .env
-   npm run gen-secret      # pega el resultado en JWT_SECRET dentro de .env
-   npm start               # http://localhost:3000
+   cd server && dart pub get && cp .env.example .env
+   dart run bin/gen_secret.dart   # pega el resultado en JWT_SECRET dentro de .env
+   dart run bin/server.dart       # http://localhost:3000
    ```
 2. App:
    ```bash
@@ -24,7 +24,7 @@ Juego de tablero en Flutter con cuentas de usuario.
 ## Pruebas
 
 ```bash
-cd server && npm test     # servidor: 19 pruebas
+cd server && dart test   # servidor: 22 pruebas
 flutter test              # app: incluye test/auth/
 ```
 

@@ -1,6 +1,6 @@
 # Servidor de autenticación de Brilliant
 
-Servidor aparte (Node.js + Express + SQLite integrado de Node) donde se registran los clientes
+Servidor aparte (Dart + shelf + SQLite) donde se registran los clientes
 (la app Flutter de la carpeta raíz). Permite **crear cuenta, iniciar sesión,
 cerrar sesión y borrar la cuenta**.
 
@@ -8,14 +8,25 @@ cerrar sesión y borrar la cuenta**.
 
 ```bash
 cd server
-npm install
+dart pub get
 cp .env.example .env
-npm run gen-secret        # copia el resultado en JWT_SECRET dentro de .env
-npm start                 # http://localhost:3000
-npm test                  # 19 pruebas
+dart run bin/gen_secret.dart   # copia el resultado en JWT_SECRET dentro de .env
+dart run bin/server.dart       # http://localhost:3000
+dart test                      # 22 pruebas
 ```
 
-Requiere Node 22.13 o superior (usa el SQLite incluido en Node, no hay que compilar nada).
+Requiere Dart 3.9 o superior (el que trae Flutter sirve). SQLite viene dentro del paquete
+`sqlite3`; no hay que instalar nada aparte.
+
+Para producción se compila a un ejecutable:
+
+```bash
+dart build cli -t bin/server.dart
+# resultado: build/cli/<plataforma>/bundle/  (bin/server[.exe] + lib/ con la librería de SQLite)
+```
+
+> `dart compile exe` **no** sirve aquí (el paquete `sqlite3` usa *build hooks*). Usa
+> `dart build cli` y copia la carpeta `bundle/` completa.
 
 ## API
 
@@ -45,17 +56,23 @@ Las rutas protegidas llevan `Authorization: Bearer <accessToken>`.
 | Enumeración de usuarios | Mismo mensaje y mismo tiempo de respuesta si el nametag no existe (hash señuelo). El bloqueo también aplica a nametags inexistentes. |
 | Robo de tokens | Access token JWT de 15 min (HS256, con `iss`/`aud`/`exp`, algoritmo fijado). Refresh token aleatorio de 256 bits, **de un solo uso con rotación**: si se reutiliza uno viejo se revoca toda la sesión. |
 | Cuenta borrada | El access token se valida contra la BD en cada petición, así que deja de servir al instante. Borrar la cuenta exige la contraseña de nuevo. |
-| Inyección / abuso | Consultas SQL preparadas, validación con Zod, cuerpo máximo 10 KB, `helmet`, sin `X-Powered-By`, `Cache-Control: no-store`. |
-| Tráfico en claro | En `NODE_ENV=production` rechaza peticiones que no lleguen por HTTPS. |
+| Inyección / abuso | Consultas SQL con parámetros, validación de cada campo, cuerpo máximo 10 KB, cabeceras de seguridad (las mismas que `helmet`), sin `X-Powered-By`, `Cache-Control: no-store`. |
+| Tráfico en claro | En `ENV=production` (o `NODE_ENV=production`) rechaza peticiones que no lleguen por HTTPS. |
 | Mala configuración | No arranca sin `JWT_SECRET` de 32+ caracteres. Errores internos solo van al log. |
 
-Paquetes de seguridad usados (no se implementó criptografía propia):
-`argon2`, `jose`, `helmet`, `express-rate-limit`, `zod`.
+Criptografía de paquetes conocidos (no se implementó criptografía propia): Argon2id de
+`pointycastle` (se calcula en otro *isolate* para no frenar al servidor) y HMAC-SHA256 / SHA-256
+de `crypto`. El JWT solo acepta `HS256` y compara la firma en tiempo constante.
+
+**Compatibilidad con el servidor anterior (Node):** misma API, misma base de datos y los hashes
+usan el formato PHC estándar (`$argon2id$v=19$m=...`), así que las cuentas que ya existían siguen
+funcionando. Los parámetros por defecto pasan a m=19 MiB, t=2 (mínimo de OWASP); cada hash viejo
+guarda sus propios parámetros y se verifica con ellos.
 
 ## Puesta en producción
 
 1. Pon el servidor detrás de un proxy con **TLS** (Caddy, nginx, Render, Fly...).
-2. Variables: `NODE_ENV=production`, `TRUST_PROXY=1`, `JWT_SECRET=...`.
+2. Variables: `ENV=production`, `TRUST_PROXY=1`, `JWT_SECRET=...`.
 3. Respalda el archivo `DB_PATH` y no lo expongas.
 4. Si cambias `JWT_SECRET` los access tokens vigentes dejan de valer, pero la app los renueva
    sola con el refresh token (que no depende de ese secreto); nadie tiene que volver a entrar.
@@ -67,7 +84,7 @@ Paquetes de seguridad usados (no se implementó criptografía propia):
 - **Contraseña mínima de 6 caracteres** (se rechazan las más obvias como `123456` o `qwerty`).
   Es una política débil a propósito; lo que la protege es Argon2id, el bloqueo tras 5 fallos y el
   límite por IP. Si algún día quieres más seguridad, basta subir el mínimo en
-  `server/src/validation.js` y en `lib/auth/validadores.dart`.
+  `server/lib/src/validacion.dart` y en `lib/auth/validadores.dart`.
 - El nametag es público y único (sin distinguir mayúsculas), así que registrar uno ya usado responde
   409. Es inevitable en cualquier juego con nombres públicos; está protegido por el límite por IP.
 - El bloqueo por nametag permite que alguien bloquee 15 min a otra persona a propósito; es el

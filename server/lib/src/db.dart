@@ -1,24 +1,32 @@
-import { DatabaseSync } from 'node:sqlite'; // SQLite incluido en Node (sin compilar nada)
-import fs from 'node:fs';
-import path from 'node:path';
+import 'dart:io';
 
-export function abrirDb(dbPath) {
-  if (dbPath !== ':memory:') {
-    fs.mkdirSync(path.dirname(path.resolve(dbPath)), { recursive: true });
+import 'package:sqlite3/sqlite3.dart';
+
+/// Abre (o crea) la base de datos SQLite y aplica el esquema.
+/// Usa `:memory:` para una base temporal (pruebas).
+Database abrirDb(String dbPath) {
+  final Database db;
+  if (dbPath == ':memory:') {
+    db = sqlite3.openInMemory();
+  } else {
+    File(dbPath).parent.createSync(recursive: true);
+    db = sqlite3.open(dbPath);
+    db.execute('PRAGMA journal_mode = WAL;');
   }
-  const db = new DatabaseSync(dbPath);
-  db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+  db.execute('PRAGMA foreign_keys = ON;');
 
   // Las primeras versiones del proyecto iniciaban sesión con correo. Si la base
   // de datos es de esa época (tiene la columna "email") se reinicia: eran solo
   // cuentas de prueba y el esquema nuevo no es compatible.
-  const columnas = db.prepare('PRAGMA table_info(users)').all();
-  if (columnas.some((c) => c.name === 'email')) {
-    console.warn('AVISO: base de datos con el esquema antiguo (correo). Se reinicia.');
-    db.exec('DROP TABLE IF EXISTS refresh_tokens; DROP TABLE IF EXISTS login_failures; DROP TABLE users;');
+  final columnas = db.select('PRAGMA table_info(users)');
+  if (columnas.any((c) => c['name'] == 'email')) {
+    stderr.writeln('AVISO: base de datos con el esquema antiguo (correo). Se reinicia.');
+    db.execute(
+      'DROP TABLE IF EXISTS refresh_tokens; DROP TABLE IF EXISTS login_failures; DROP TABLE users;',
+    );
   }
 
-  db.exec(`
+  db.execute('''
     -- "nametag" es el nombre público (con sus mayúsculas) y también el usuario
     -- con el que se inicia sesión. "nametag_lower" es lo mismo en minúsculas y es
     -- único: así "Ana" y "ana" no pueden existir a la vez.
@@ -53,6 +61,6 @@ export function abrirDb(dbPath) {
       locked_until INTEGER NOT NULL DEFAULT 0,
       updated_at   INTEGER NOT NULL
     );
-  `);
+  ''');
   return db;
 }
