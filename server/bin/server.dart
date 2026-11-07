@@ -26,9 +26,10 @@ Map<String, String> _cargarEnv() {
 }
 
 Future<void> main() async {
+  final env = _cargarEnv();
   final Config config;
   try {
-    config = cargarConfig(_cargarEnv());
+    config = cargarConfig(env);
   } on ConfigInvalida catch (e) {
     stderr.writeln('Configuración inválida: $e');
     exit(1);
@@ -36,6 +37,11 @@ Future<void> main() async {
 
   final db = abrirDb(config.dbPath);
   final app = AppAuth(config: config, db: db);
+  final ws = ServidorWs(
+    lobby: Lobby(config: ConfigMultijugador.desdeEnv(env)),
+    autenticar: app.autenticarToken,
+  );
+  app.webSocket = ws.handler;
 
   final timer = Timer.periodic(const Duration(hours: 1), (_) => app.limpiar());
 
@@ -52,6 +58,7 @@ Future<void> main() async {
 
   Future<void> apagar() async {
     timer.cancel();
+    ws.cerrar();
     await server.close();
     db.close();
     exit(0);

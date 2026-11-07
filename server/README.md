@@ -12,7 +12,7 @@ dart pub get
 cp .env.example .env
 dart run bin/gen_secret.dart   # copia el resultado en JWT_SECRET dentro de .env
 dart run bin/server.dart       # http://localhost:3000
-dart test                      # 22 pruebas
+dart test                      # 39 pruebas
 ```
 
 Requiere Dart 3.9 o superior (el que trae Flutter sirve). SQLite viene dentro del paquete
@@ -43,6 +43,7 @@ Todas las respuestas son JSON. Los errores tienen la forma
 | GET | `/account/me` | — (Bearer) | 200 `{user}` |
 | POST | `/account/delete` | `password` (Bearer) | 204 |
 | GET | `/health` | — | 200 |
+| GET | `/ws` | WebSocket del multijugador | ver [MULTIJUGADOR.md](MULTIJUGADOR.md) |
 
 "Sesión" = `{accessToken, refreshToken, expiresIn, user: {id, nametag}}`.
 Las rutas protegidas llevan `Authorization: Bearer <accessToken>`.

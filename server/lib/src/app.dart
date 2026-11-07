@@ -21,7 +21,11 @@ class AppAuth {
   final LimitePorIp _limiteAuth;
   late final Handler handler;
 
-  AppAuth({required this.config, required this.db, Router? rutasExtra})
+  /// Manejador de `/ws` (partidas en tiempo real). Se asigna después de crear
+  /// la app porque necesita [autenticarToken].
+  Handler? webSocket;
+
+  AppAuth({required this.config, required this.db, this.webSocket})
     : seg = Seguridad(config),
       _limiteGlobal = LimitePorIp(
         ventana: const Duration(minutes: 15),
@@ -38,7 +42,7 @@ class AppAuth {
     }
     handler = pipeline
         .addMiddleware(limitarPorIp(_limiteGlobal, config))
-        .addHandler(_rutas(rutasExtra).call);
+        .addHandler(_rutas().call);
     limpiar();
   }
 
@@ -154,7 +158,7 @@ class AppAuth {
 
   // ---------- Rutas ----------
 
-  Router _rutas(Router? extra) {
+  Router _rutas() {
     final r = Router(
       notFoundHandler: (_) =>
           throw ApiError(404, 'no_encontrado', 'Ruta no encontrada.'),
@@ -170,7 +174,11 @@ class AppAuth {
       return respuestaJson(200, {'user': {'id': u.id, 'nametag': u.nametag}});
     });
     r.post('/account/delete', _conLimiteAuth(_borrarCuenta));
-    if (extra != null) r.mount('/', extra.call);
+    r.get('/ws', (Request req) {
+      final ws = webSocket;
+      if (ws == null) throw ApiError(404, 'no_encontrado', 'Ruta no encontrada.');
+      return ws(req);
+    });
     return r;
   }
 

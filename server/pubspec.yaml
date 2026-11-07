@@ -1,5 +1,5 @@
 name: brilliant_server
-description: Servidor de Brilliant (cuentas y, más adelante, partidas multijugador).
+description: Servidor de Brilliant (cuentas y partidas multijugador).
 publish_to: none
 version: 2.0.0
 
@@ -14,9 +14,12 @@ dependencies:
   pointycastle: ^4.0.0
   shelf: ^1.4.2
   shelf_router: ^1.1.4
+  shelf_web_socket: ^3.0.0
   sqlite3: ^3.9.0
+  web_socket_channel: ^3.0.3
 
 dev_dependencies:
+  async: ^2.12.0
   http: ^1.6.0
   lints: ^6.0.0
   test: ^1.26.0
