@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:bloc/bloc.dart';
+import 'package:brilliant_reglas/brilliant_reglas.dart' show Coordenada;
 
 import '../auth/auth_models.dart';
 import 'conexion_multijugador.dart';
@@ -41,6 +42,25 @@ class LobbySalir extends LobbyEvent {}
 /// Reconectar ya (por ejemplo, después de "abriste tu cuenta en otro lugar").
 class LobbyReconectar extends LobbyEvent {}
 
+/// Los 6 números iniciales de mi tablero.
+class LobbyIniciales extends LobbyEvent {
+  final Map<Coordenada, int> valores;
+  LobbyIniciales(this.valores);
+}
+
+class LobbyJugada extends LobbyEvent {
+  final Coordenada ancla;
+  final Coordenada destino;
+  LobbyJugada(this.ancla, this.destino);
+}
+
+class LobbyPasar extends LobbyEvent {}
+
+class LobbyConceder extends LobbyEvent {}
+
+/// Cierra la tarjeta de resultados de la última partida.
+class LobbyCerrarResultados extends LobbyEvent {}
+
 class _MensajeRecibido extends LobbyEvent {
   final Map<String, dynamic> msg;
   _MensajeRecibido(this.msg);
@@ -68,10 +88,13 @@ class LobbyState {
   final Usuario? yo;
   final SalaInfo? sala;
 
-  /// Último estado de la partida tal como lo manda el servidor (paso 6).
-  final Map<String, dynamic>? partida;
+  /// Partida en curso (o la que acaba de terminar), según el servidor.
+  final PartidaInfo? partida;
 
-  /// Se mandó crear/unirse y aún no hay respuesta.
+  /// Clasificación de la última partida (se muestra al volver al lobby).
+  final ResultadosPartida? resultados;
+
+  /// Se mandó crear/unirse o una jugada y aún no hay respuesta.
   final bool esperando;
   final Aviso? aviso;
 
@@ -80,18 +103,21 @@ class LobbyState {
     this.yo,
     this.sala,
     this.partida,
+    this.resultados,
     this.esperando = false,
     this.aviso,
   });
 
   bool get conectado => conexion == EstadoConexion.conectado;
   JugadorEnSala? get miJugador => yo == null ? null : sala?.jugador(yo!.id);
+  JugadorPartidaInfo? get yoEnPartida => yo == null ? null : partida?.jugador(yo!.id);
 
   LobbyState copyWith({
     EstadoConexion? conexion,
     Usuario? yo,
     SalaInfo? Function()? sala,
-    Map<String, dynamic>? Function()? partida,
+    PartidaInfo? Function()? partida,
+    ResultadosPartida? Function()? resultados,
     bool? esperando,
     Aviso? aviso,
   }) => LobbyState(
@@ -99,6 +125,7 @@ class LobbyState {
     yo: yo ?? this.yo,
     sala: sala != null ? sala() : this.sala,
     partida: partida != null ? partida() : this.partida,
+    resultados: resultados != null ? resultados() : this.resultados,
     esperando: esperando ?? this.esperando,
     aviso: aviso ?? this.aviso,
   );
@@ -128,6 +155,28 @@ class LobbyBloc extends Bloc<LobbyEvent, LobbyState> {
     on<LobbyListo>((e, emit) => _pedir(emit, {'tipo': 'listo', 'listo': e.listo}));
     on<LobbySalir>(_alSalir);
     on<LobbyReconectar>((_, _) => conexion.reconectarAhora());
+    on<LobbyIniciales>((e, emit) => _pedir(
+      emit,
+      {
+        'tipo': 'iniciales',
+        'valores': [
+          for (final MapEntry(key: c, value: n) in e.valores.entries) [c.fila, c.columna, n],
+        ],
+      },
+      esperar: true,
+    ));
+    on<LobbyJugada>((e, emit) => _pedir(
+      emit,
+      {
+        'tipo': 'jugada',
+        'ancla': [e.ancla.fila, e.ancla.columna],
+        'destino': [e.destino.fila, e.destino.columna],
+      },
+      esperar: true,
+    ));
+    on<LobbyPasar>((_, emit) => _pedir(emit, {'tipo': 'pasar'}, esperar: true));
+    on<LobbyConceder>((_, emit) => _pedir(emit, {'tipo': 'conceder'}));
+    on<LobbyCerrarResultados>((_, emit) => emit(state.copyWith(resultados: () => null)));
     on<_ConexionCambio>(_alCambiarConexion);
     on<_MensajeRecibido>(_alRecibir);
   }
@@ -155,8 +204,15 @@ class LobbyBloc extends Bloc<LobbyEvent, LobbyState> {
     // Aunque no haya conexión se sale en la pantalla; el servidor lo sacará
     // al vencer el tiempo de gracia.
     conexion.enviar({'tipo': 'salir'});
-    emit(state.copyWith(sala: () => null, partida: () => null, esperando: false));
+    emit(_fueraDeSala());
   }
+
+  LobbyState _fueraDeSala() => state.copyWith(
+    sala: () => null,
+    partida: () => null,
+    resultados: () => null,
+    esperando: false,
+  );
 
   void _alCambiarConexion(_ConexionCambio e, Emitter<LobbyState> emit) {
     emit(state.copyWith(conexion: e.estado, esperando: false));
@@ -168,26 +224,43 @@ class LobbyBloc extends Bloc<LobbyEvent, LobbyState> {
       switch (m['tipo']) {
         case 'autenticado':
           final sala = m['sala'];
-          emit(state.copyWith(
-            yo: Usuario.fromJson(m['user'] as Map<String, dynamic>),
-            sala: () => sala == null ? null : SalaInfo.fromJson(sala as Map<String, dynamic>),
-            partida: sala == null ? () => null : null,
-          ));
+          final yo = Usuario.fromJson(m['user'] as Map<String, dynamic>);
+          if (sala == null) {
+            // Ya no está en ninguna sala (por ejemplo, tardó demasiado en volver).
+            emit(_fueraDeSala().copyWith(yo: yo));
+          } else {
+            emit(state.copyWith(
+              yo: yo,
+              sala: () => SalaInfo.fromJson(sala as Map<String, dynamic>),
+            ));
+          }
         case 'sala' || 'partida_iniciada':
           final sala = SalaInfo.fromJson(m['sala'] as Map<String, dynamic>);
-          final texto = m['tipo'] == 'partida_iniciada'
-              ? '¡Todos listos! Empieza la partida.'
-              : _textoEvento(m['evento']);
+          final iniciada = m['tipo'] == 'partida_iniciada';
+          final texto = iniciada ? '¡Todos listos! Empieza la partida.' : _textoEvento(m['evento']);
           emit(state.copyWith(
             sala: () => sala,
             partida: sala.enLobby ? () => null : null,
+            resultados: iniciada ? () => null : null,
             esperando: false,
             aviso: texto == null ? null : _aviso(texto),
           ));
-        case 'partida' || 'partida_terminada':
-          emit(state.copyWith(partida: () => m['partida'] as Map<String, dynamic>?));
+        case 'partida':
+          final partida = PartidaInfo.fromJson(m['partida'] as Map<String, dynamic>);
+          final texto = _textoEventoPartida(m['evento'], partida);
+          emit(state.copyWith(
+            partida: () => partida,
+            esperando: false,
+            aviso: texto == null ? null : _aviso(texto),
+          ));
+        case 'partida_terminada':
+          emit(state.copyWith(
+            partida: () => PartidaInfo.fromJson(m['partida'] as Map<String, dynamic>),
+            resultados: () => ResultadosPartida.fromJson(m),
+            esperando: false,
+          ));
         case 'saliste':
-          emit(state.copyWith(sala: () => null, partida: () => null, esperando: false));
+          emit(_fueraDeSala());
         case 'error':
           emit(state.copyWith(
             esperando: false,
@@ -212,6 +285,40 @@ class LobbyBloc extends Bloc<LobbyEvent, LobbyState> {
       'abandono' => '$quien no volvió y salió de la sala.',
       _ => null,
     };
+  }
+
+  /// Avisos durante la partida: los puntos que gané, si se me acabó el
+  /// tiempo y lo que les pasa a los demás (sin avisar cada jugada ajena,
+  /// que con 6 jugadores serían demasiados).
+  String? _textoEventoPartida(Object? evento, PartidaInfo partida) {
+    if (evento is! Map) return null;
+    final quien = evento['nametag'];
+    final soyYo = quien == state.yo?.nametag;
+    switch (evento['tipo']) {
+      case 'jugada' when soyYo:
+        final puntos = evento['puntosGanados'];
+        if (evento['completo'] == true) {
+          return '¡Completaste tu tablero! La partida termina al acabar la ronda.';
+        }
+        return puntos is int && puntos > 0 ? '¡Zona completada! +$puntos puntos.' : null;
+      case 'jugada' when evento['completo'] == true:
+        return '$quien completó su tablero: esta es la última ronda.';
+      case 'ronda':
+        final pasaron = evento['pasaronPorTiempo'];
+        if (pasaron is List && pasaron.contains(state.yo?.nametag)) {
+          return 'Se acabó el tiempo: pasaste la ronda ${partida.ronda - 1}.';
+        }
+        return null;
+      case 'desconectado' when !soyYo:
+        return '$quien perdió la conexión. Sus turnos se pasan solos.';
+      case 'reconectado' when !soyYo:
+        return '$quien volvió.';
+      case 'concedio':
+        return soyYo ? 'Te rendiste. Puedes seguir viendo la partida.' : '$quien se rindió.';
+      case 'abandono' when !soyYo:
+        return '$quien no volvió: abandonó la partida.';
+    }
+    return null;
   }
 
   @override

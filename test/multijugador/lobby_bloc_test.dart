@@ -120,11 +120,12 @@ void main() {
   test('partida iniciada y estado de la partida', () async {
     final ws = await conectado(sala: salaJson());
     ws.servidor({'tipo': 'partida_iniciada', 'sala': salaJson(estado: 'jugando')});
-    ws.servidor({'tipo': 'partida', 'partida': {'fase': 'iniciales', 'ronda': 0}});
+    ws.servidor({'tipo': 'partida', 'partida': partidaJson(fase: 'iniciales', ronda: 0)});
     await pasa();
     expect(bloc.state.sala!.jugando, isTrue);
     expect(bloc.state.aviso!.texto, contains('Empieza la partida'));
-    expect(bloc.state.partida!['fase'], 'iniciales');
+    expect(bloc.state.partida!.enIniciales, isTrue);
+    expect(bloc.state.yoEnPartida!.nametag, 'Ana');
   });
 
   test('un mensaje con formato raro se ignora', () async {

@@ -112,3 +112,49 @@ Map<String, Object?> jugadorJson(String id, String nametag,
 
 /// Deja correr los microtasks y timers pendientes.
 Future<void> pasa([int ms = 0]) => Future<void>.delayed(Duration(milliseconds: ms));
+
+Map<String, Object?> jugadorPartidaJson(
+  String id,
+  String nametag, {
+  int nivel = 1,
+  String estado = 'jugando',
+  bool conectado = true,
+  bool yaJugo = false,
+  int puntos = 0,
+  bool completo = false,
+  List<List<int>> celdas = const [],
+  Map<String, int> lugares = const {},
+}) => {
+  'id': id,
+  'nametag': nametag,
+  'nivel': nivel,
+  'estado': estado,
+  'conectado': conectado,
+  'yaJugo': yaJugo,
+  'puntos': puntos,
+  'completo': completo,
+  'celdas': celdas,
+  'lugares': lugares,
+};
+
+/// Iniciales válidos del nivel 1.
+const iniciales1 = [[0, 2, 1], [1, 5, 2], [3, 1, 3], [3, 4, 4], [5, 2, 5], [6, 4, 6]];
+
+Map<String, Object?> partidaJson({
+  String fase = 'jugando',
+  int ronda = 1,
+  List<int>? dados = const [1, 3],
+  int? msRestantes = 60000,
+  List<Map<String, Object?>>? jugadores,
+}) => {
+  'fase': fase,
+  'ronda': ronda,
+  'maxRondas': 100,
+  'dados': fase == 'iniciales' ? null : dados,
+  'msRestantes': msRestantes,
+  'jugadores': jugadores ??
+      [
+        jugadorPartidaJson('u1', 'Ana', celdas: fase == 'iniciales' ? [] : iniciales1),
+        jugadorPartidaJson('u2', 'Beto', nivel: 3),
+      ],
+};
