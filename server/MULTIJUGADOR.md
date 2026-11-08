@@ -3,7 +3,7 @@
 Las partidas multijugador usan un WebSocket en `/ws` (en producción, `wss://…/ws`).
 Todos los mensajes son objetos JSON con un campo `tipo`.
 
-Estado: **servidor completo** (lobby y partida). Falta la parte de la app.
+Estado: **completo** (servidor y app: lobby, partida, desconexiones y resultados).
 
 ## Conexión y autenticación
 

@@ -551,7 +551,7 @@ class _TableroViewState extends State<_TableroView> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              for (final id in ids) _IndicadorZona(zona: tablero.zonas[id]!),
+              for (final id in ids) IndicadorZona(zona: tablero.zonas[id]!),
             ],
           ),
         );
@@ -989,10 +989,10 @@ class _TableroViewState extends State<_TableroView> {
 }
 
 /// Un dado dibujado con puntos. Si [valor] es null se muestra vacío.
-class _Dado extends StatelessWidget {
+class Dado extends StatelessWidget {
   final int? valor;
 
-  const _Dado({required this.valor});
+  const Dado({super.key, required this.valor});
 
   /// Posiciones (en una cuadrícula de 3x3) de los puntos de cada cara.
   static const _puntos = {
@@ -1209,7 +1209,9 @@ class _LeyendaZonas extends StatelessWidget {
   }
 }
 
-const _colorTexto = Color(0xFF1B3B4D);
+/// Color de los textos y contornos del tablero.
+const colorTextoTablero = Color(0xFF1B3B4D);
+const _colorTexto = colorTextoTablero;
 
 /// Ancho de cada columna de indicadores a los lados del tablero.
 const _anchoIndicadores = 48.0;
@@ -1227,10 +1229,10 @@ String simboloDeTipo(Tipo tipo) {
 /// Indicador de una zona al lado del tablero: cuadro de su color con el
 /// símbolo de su regla y, debajo, los puntos del 1º, 2º y 3º en llenarla.
 /// Cuando la zona está llena lleva una palomita.
-class _IndicadorZona extends StatelessWidget {
+class IndicadorZona extends StatelessWidget {
   final Zona zona;
 
-  const _IndicadorZona({required this.zona});
+  const IndicadorZona({super.key, required this.zona});
 
   @override
   Widget build(BuildContext context) {
@@ -1458,7 +1460,7 @@ class _DadoElegible extends StatelessWidget {
         ),
         child: Opacity(
           opacity: apagado && !rodando ? 0.35 : 1,
-          child: _Dado(valor: cara),
+          child: Dado(valor: cara),
         ),
       ),
     );

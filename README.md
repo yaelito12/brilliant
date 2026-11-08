@@ -28,6 +28,12 @@ Con la sesión iniciada, en el menú aparece **Jugar en línea**: se crea una sa
 un código de 6 letras), cada jugador elige su mapa y la partida empieza cuando todos (2 a 6)
 pulsan "Estoy listo". Si se corta la conexión, la app reconecta sola y vuelve a la sala.
 
+En la partida cada uno juega **su propio tablero con los mismos dados**: pone sus 6 números
+iniciales y en cada ronda coloca un número o pasa (60 s por ronda). El marcador muestra los puntos
+y qué está haciendo cada jugador; tocando a alguien se ve su tablero. Se puede **rendir** en
+cualquier momento. Al terminar aparecen los resultados y, si todos vuelven a pulsar "listo",
+empieza la revancha.
+
 Para probarlo en una sola computadora: arranca el servidor y abre dos copias de la app con
 cuentas distintas (por ejemplo `flutter run -d windows` y `flutter run -d chrome`).
 Detalles del protocolo en [`server/MULTIJUGADOR.md`](server/MULTIJUGADOR.md).

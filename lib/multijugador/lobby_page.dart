@@ -9,6 +9,8 @@ import '../menu_mapas.dart';
 import 'conexion_multijugador.dart';
 import 'lobby_bloc.dart';
 import 'modelos.dart';
+import 'partida_view.dart';
+import 'resultados_view.dart';
 
 const _colorTexto = Color(0xFF1B3B4D);
 const _fondo = Color(0xFFE8F2ED);
@@ -117,23 +119,27 @@ class _VistaLobbyState extends State<_VistaLobby> {
           body: BlocBuilder<LobbyBloc, LobbyState>(
             builder: (context, state) {
               final sala = state.sala;
+              final enPartida = sala != null && sala.jugando && state.partida != null;
               return Column(
                 children: [
                   BarraConexion(estado: state.conexion),
                   Expanded(
-                    child: Center(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(16),
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 720),
-                          child: sala == null
-                              ? _sinSala(context, state)
-                              : sala.jugando
-                                  ? _PartidaEnCurso(sala: sala)
-                                  : _EnSala(state: state),
-                        ),
-                      ),
-                    ),
+                    // La partida usa toda la pantalla; el lobby, una columna centrada.
+                    child: enPartida
+                        ? PartidaMultijugadorView(state: state)
+                        : Center(
+                            child: SingleChildScrollView(
+                              padding: const EdgeInsets.all(16),
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 720),
+                                child: sala == null
+                                    ? _sinSala(context, state)
+                                    : sala.jugando
+                                        ? const _Preparando()
+                                        : _EnSala(state: state),
+                              ),
+                            ),
+                          ),
                   ),
                 ],
               );
@@ -334,10 +340,19 @@ class _EnSala extends StatelessWidget {
       estadoTexto = '¡Todos listos!';
     }
 
+    final resultados = state.resultados;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (resultados != null) ...[
+          TarjetaResultados(
+            resultados: resultados,
+            yoId: state.yo?.id,
+            onCerrar: () => bloc.add(LobbyCerrarResultados()),
+          ),
+          const SizedBox(height: 16),
+        ],
         _TarjetaCodigo(codigo: sala.codigo),
         const SizedBox(height: 16),
         _Titulo('Jugadores (${sala.jugadores.length}/${sala.maxJugadores})'),
@@ -486,29 +501,20 @@ class _FilaJugador extends StatelessWidget {
   }
 }
 
-/// Mientras no esté la pantalla de juego multijugador (paso 6).
-class _PartidaEnCurso extends StatelessWidget {
-  final SalaInfo sala;
-  const _PartidaEnCurso({required this.sala});
+/// La sala ya empezó pero aún no llega el estado de la partida (un instante).
+class _Preparando extends StatelessWidget {
+  const _Preparando();
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.sports_esports, size: 48, color: Colors.teal.shade700),
-            const SizedBox(height: 8),
-            const Text('¡La partida comenzó!',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: _colorTexto)),
-            const SizedBox(height: 8),
-            Text('Sala ${sala.codigo} · ${sala.jugadores.length} jugadores'),
-          ],
-        ),
-      ),
+    return const Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CircularProgressIndicator(),
+        SizedBox(height: 12),
+        Text('¡La partida comenzó! Preparando el tablero…',
+            style: TextStyle(fontWeight: FontWeight.bold, color: _colorTexto)),
+      ],
     );
   }
 }
