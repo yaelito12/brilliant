@@ -41,6 +41,7 @@ dependencies:
   # Reglas del juego compartidas con el servidor (Dart puro).
   brilliant_reglas:
     path: packages/brilliant_reglas
+  web_socket_channel: ^3.0.3
 
 dev_dependencies:
   flutter_test:

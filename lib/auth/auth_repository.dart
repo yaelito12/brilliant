@@ -86,8 +86,10 @@ class AuthRepository {
   }
 
   /// Token de acceso vigente (lo renueva si está por vencer). Es lo que
-  /// presentará la app al conectarse a una partida online.
-  Future<String> tokenDeAcceso() => _tokenDeAcceso();
+  /// presenta la app al conectarse al multijugador. Con [forzarRenovacion]
+  /// pide uno nuevo aunque el actual no haya vencido (el servidor lo rechazó).
+  Future<String> tokenDeAcceso({bool forzarRenovacion = false}) =>
+      forzarRenovacion ? _renovar() : _tokenDeAcceso();
 
   Future<String> _tokenDeAcceso() async {
     final token = _accessToken;
