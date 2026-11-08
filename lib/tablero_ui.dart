@@ -1,10 +1,15 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+
+import 'aviso_sin_salida.dart';
+import 'fondo.dart';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:brilliant_reglas/brilliant_reglas.dart';
+
 import 'bloc/juego_bloc.dart';
 import 'bloc/juego_event.dart';
 import 'bloc/juego_state.dart';
@@ -58,9 +63,7 @@ class _TableroViewState extends State<_TableroView> {
   Set<Coordenada> get _casillasIniciales => widget.nivel.casillasIniciales;
 
   bool get _todasLasCasillasInicalesLlenas {
-    return _casillasIniciales.every(
-      (c) => _valoresIniciales.containsKey(c),
-    );
+    return _casillasIniciales.every((c) => _valoresIniciales.containsKey(c));
   }
 
   /// Sale de la partida (o se rinde) y vuelve al menú de mapas. Si hay
@@ -172,7 +175,9 @@ class _TableroViewState extends State<_TableroView> {
     // La zona también tiene que aceptar el número (ej. la naranja 4-6)
     final zona = _tablero.zonaEn(coordenada)!;
     final otrosEnLaZona = _valoresIniciales.entries
-        .where((e) => e.key != coordenada && _tablero.zonaEn(e.key)?.id == zona.id)
+        .where(
+          (e) => e.key != coordenada && _tablero.zonaEn(e.key)?.id == zona.id,
+        )
         .map((e) => e.value)
         .toList();
     bool fueraDeRegla(int numero) =>
@@ -180,6 +185,21 @@ class _TableroViewState extends State<_TableroView> {
     final zonaRestringe = List.generate(6, (i) => i + 1).any(fueraDeRegla);
     bool bloqueado(int numero) =>
         ocupadosPorOtros.contains(numero) || fueraDeRegla(numero);
+
+    // Si no cabe ningún número, se explica por qué y se ofrece moverlo aquí.
+    final sinSalida = bloqueoInicial(
+      widget.nivel,
+      _valoresIniciales,
+      coordenada,
+    );
+    void moverAqui(int numero) {
+      Navigator.pop(context);
+      setState(() {
+        _valoresIniciales.remove(sinSalida!.usadoEn[numero]);
+        _valoresIniciales[coordenada] = numero;
+      });
+      bloc.add(ValoresInicialesIncompletos());
+    }
 
     final focusNode = FocusNode();
     focusNode.requestFocus();
@@ -199,6 +219,9 @@ class _TableroViewState extends State<_TableroView> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      // Puede crecer y desplazarse: con el aviso de "casilla sin salida" el
+      // contenido no cabe en la altura normal de la hoja.
+      isScrollControlled: true,
       builder: (_) {
         return KeyboardListener(
           focusNode: focusNode,
@@ -226,95 +249,101 @@ class _TableroViewState extends State<_TableroView> {
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Elige un número (1-6) — sin repetir',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Puedes presionar un número en tu teclado',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                ),
-                if (zonaRestringe) ...[
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Elige un número (1-6) — sin repetir',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 4),
                   Text(
-                    'Zona ${nombreDeTipo(zona.tipo).toLowerCase()}: '
-                    '${zona.tipo.descripcion.toLowerCase()}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.orange.shade800,
-                    ),
+                    'Puedes presionar un número en tu teclado',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
-                ],
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: List.generate(6, (i) {
-                    final numero = i + 1;
-                    final estaOcupado = bloqueado(numero);
-                    final esSeleccionado = valorActual == numero;
+                  if (zonaRestringe) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Zona ${nombreDeTipo(zona.tipo).toLowerCase()}: '
+                      '${zona.tipo.descripcion.toLowerCase()}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange.shade800,
+                      ),
+                    ),
+                  ],
+                  if (sinSalida != null) ...[
+                    const SizedBox(height: 12),
+                    AvisoSinSalida(bloqueo: sinSalida, onMover: moverAqui),
+                  ],
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: List.generate(6, (i) {
+                      final numero = i + 1;
+                      final estaOcupado = bloqueado(numero);
+                      final esSeleccionado = valorActual == numero;
 
-                    return GestureDetector(
-                      onTap: estaOcupado
-                          ? null
-                          : () => seleccionarNumero(numero),
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: estaOcupado
-                              ? Colors.grey.shade300
-                              : esSeleccionado
-                              ? Colors.orange.shade600
-                              : Colors.teal.shade600,
-                          shape: BoxShape.circle,
-                          border: esSeleccionado
-                              ? Border.all(color: Colors.white, width: 3)
-                              : null,
-                        ),
-                        child: Center(
-                          child: Text(
-                            '$numero',
-                            style: TextStyle(
-                              color: estaOcupado
-                                  ? Colors.grey.shade500
-                                  : Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
+                      return GestureDetector(
+                        onTap: estaOcupado
+                            ? null
+                            : () => seleccionarNumero(numero),
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: estaOcupado
+                                ? Colors.grey.shade300
+                                : esSeleccionado
+                                ? Colors.orange.shade600
+                                : Colors.teal.shade600,
+                            shape: BoxShape.circle,
+                            border: esSeleccionado
+                                ? Border.all(color: Colors.white, width: 3)
+                                : null,
+                          ),
+                          child: Center(
+                            child: Text(
+                              '$numero',
+                              style: TextStyle(
+                                color: estaOcupado
+                                    ? Colors.grey.shade500
+                                    : Colors.white,
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 16),
-                TextButton.icon(
-                  onPressed: valorActual == null
-                      ? null
-                      : () {
-                          Navigator.pop(context);
-                          setState(() {
-                            _valoresIniciales.remove(coordenada);
-                          });
-                          bloc.add(ValoresInicialesIncompletos());
-                        },
-                  icon: Icon(
-                    Icons.delete,
-                    color: valorActual == null ? Colors.grey : Colors.red,
+                      );
+                    }),
                   ),
-                  label: Text(
-                    'Borrar número (Supr)',
-                    style: TextStyle(
+                  const SizedBox(height: 16),
+                  TextButton.icon(
+                    onPressed: valorActual == null
+                        ? null
+                        : () {
+                            Navigator.pop(context);
+                            setState(() {
+                              _valoresIniciales.remove(coordenada);
+                            });
+                            bloc.add(ValoresInicialesIncompletos());
+                          },
+                    icon: Icon(
+                      Icons.delete,
                       color: valorActual == null ? Colors.grey : Colors.red,
                     ),
+                    label: Text(
+                      'Borrar número (Supr)',
+                      style: TextStyle(
+                        color: valorActual == null ? Colors.grey : Colors.red,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -367,7 +396,8 @@ class _TableroViewState extends State<_TableroView> {
                 );
               } else if (completoZona) {
                 final id = completadas.last;
-                final color = nombreDeTipo(tablero.zonas[id]!.tipo).toLowerCase();
+                final color = nombreDeTipo(tablero.zonas[id]!.tipo)
+                    .toLowerCase();
                 _mostrarSnack(
                   context,
                   Icons.star,
@@ -381,116 +411,131 @@ class _TableroViewState extends State<_TableroView> {
           builder: (context, juego) {
             return BlocBuilder<PartidaBloc, PartidaState>(
               builder: (context, partida) {
-                return Scaffold(
-                  backgroundColor: const Color(0xFFE8F2ED),
-                  appBar: AppBar(
-                    title: const Text(
-                      'Brilliant',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    backgroundColor: Colors.teal.shade700,
-                    foregroundColor: Colors.white,
-                    // Sin flecha de regreso: se sale con Rendirse/Salir
-                    automaticallyImplyLeading: false,
-                    actions: [
-                      // Mapa que se está jugando
-                      const Icon(Icons.map, size: 20),
-                      const SizedBox(width: 6),
-                      Text(
-                        widget.nivel.nombre,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+                return FondoBrilliant(
+                  child: Scaffold(
+                    backgroundColor: Colors.transparent,
+                    appBar: AppBar(
+                      title: const Text(
+                        'Brilliant',
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(width: 12),
-                      _buildBotonSalir(context, partida),
-                      const SizedBox(width: 8),
-                    ],
-                  ),
-                  // Los dados y el botón van pegados al tablero para no
-                  // tener que cruzar la pantalla en cada jugada
-                  body: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final tablero = _buildTablero(context, juego, partida);
-                      final leyenda = _LeyendaChips(
-                        tablero: partida.tablero ?? _tablero,
-                      );
-
-                      // Pantalla ancha: panel justo a la derecha del tablero
-                      if (constraints.maxWidth >= 860) {
-                        const anchoPanel = 320.0;
-                        final lado = min(
-                          min(constraints.maxHeight - 32, 640.0),
-                          constraints.maxWidth -
-                              anchoPanel -
-                              64 -
-                              2 * _anchoIndicadores,
+                      backgroundColor: Colors.teal.shade700,
+                      foregroundColor: Colors.white,
+                      // Sin flecha de regreso: se sale con Rendirse/Salir
+                      automaticallyImplyLeading: false,
+                      actions: [
+                        // Mapa que se está jugando
+                        const Icon(Icons.map, size: 20),
+                        const SizedBox(width: 6),
+                        Text(
+                          widget.nivel.nombre,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(width: 12),
+                        _buildBotonSalir(context, partida),
+                        const SizedBox(width: 8),
+                      ],
+                    ),
+                    // Los dados y el botón van pegados al tablero para no
+                    // tener que cruzar la pantalla en cada jugada
+                    body: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final tablero = _buildTablero(context, juego, partida);
+                        final leyenda = _LeyendaChips(
+                          tablero: partida.tablero ?? _tablero,
                         );
-                        return Center(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox(
-                                width: lado + 2 * _anchoIndicadores,
-                                height: lado,
-                                child: tablero,
-                              ),
-                              const SizedBox(width: 16),
-                              SizedBox(
-                                width: anchoPanel,
-                                height: lado,
-                                child: Center(
-                                  child: SingleChildScrollView(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        _buildPanelLateral(
-                                          context,
-                                          juego,
-                                          partida,
-                                        ),
-                                        const SizedBox(height: 12),
-                                        leyenda,
-                                      ],
+
+                        // Pantalla ancha: panel justo a la derecha del tablero
+                        if (constraints.maxWidth >= 860) {
+                          const anchoPanel = 320.0;
+                          final lado = min(
+                            min(constraints.maxHeight - 32, 640.0),
+                            constraints.maxWidth -
+                                anchoPanel -
+                                64 -
+                                2 * _anchoIndicadores,
+                          );
+                          return Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: lado + 2 * _anchoIndicadores,
+                                  height: lado,
+                                  child: tablero,
+                                ),
+                                const SizedBox(width: 16),
+                                SizedBox(
+                                  width: anchoPanel,
+                                  height: lado,
+                                  child: Center(
+                                    child: SingleChildScrollView(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          _buildPanelLateral(
+                                            context,
+                                            juego,
+                                            partida,
+                                          ),
+                                          const SizedBox(height: 12),
+                                          leyenda,
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
+                              ],
+                            ),
+                          );
+                        }
 
-                      // Pantalla angosta: tarjeta justo debajo del tablero
-                      return Column(
-                        children: [
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                              child: Center(
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 560 + 2 * _anchoIndicadores,
+                        // Pantalla angosta: tarjeta justo debajo del tablero
+                        return Column(
+                          children: [
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  12,
+                                  12,
+                                  12,
+                                  8,
+                                ),
+                                child: Center(
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 560 + 2 * _anchoIndicadores,
+                                    ),
+                                    child: tablero,
                                   ),
-                                  child: tablero,
                                 ),
                               ),
                             ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 560),
-                              child: _buildPanelInferior(context, juego, partida),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 560,
+                                ),
+                                child: _buildPanelInferior(
+                                  context,
+                                  juego,
+                                  partida,
+                                ),
+                              ),
                             ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-                            child: leyenda,
-                          ),
-                        ],
-                      );
-                    },
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+                              child: leyenda,
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                   ),
                 );
               },
@@ -547,14 +592,14 @@ class _TableroViewState extends State<_TableroView> {
     final tablero = partida.tablero ?? _tablero;
 
     Widget columna(List<String> ids) => SizedBox(
-          width: _anchoIndicadores,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              for (final id in ids) IndicadorZona(zona: tablero.zonas[id]!),
-            ],
-          ),
-        );
+      width: _anchoIndicadores,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          for (final id in ids) IndicadorZona(zona: tablero.zonas[id]!),
+        ],
+      ),
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -695,23 +740,35 @@ class _TableroViewState extends State<_TableroView> {
     final pendientes = _casillasIniciales
         .where((c) => !_valoresIniciales.containsKey(c))
         .length;
+    // Avisa en cuanto una casilla vacía se queda sin números posibles.
+    final sinSalida = inicialesSinSalida(widget.nivel, _valoresIniciales);
 
-    return Row(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Icon(Icons.edit, color: Colors.orange.shade700),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            pendientes > 0
-                ? 'Toca las casillas marcadas y pon los números del 1 al 6 sin repetir. Faltan $pendientes.'
-                : 'Todos los números iniciales están puestos.',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: _colorTexto,
+        Row(
+          children: [
+            Icon(Icons.edit, color: Colors.orange.shade700),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                pendientes > 0
+                    ? 'Toca las casillas marcadas y pon los números del 1 al 6 sin repetir. Faltan $pendientes.'
+                    : 'Todos los números iniciales están puestos.',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: _colorTexto,
+                ),
+              ),
             ),
-          ),
+          ],
         ),
+        if (sinSalida.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          AvisoAnticipado(texto: avisoCasillasSinSalida(_tablero, sinSalida)),
+        ],
       ],
     );
   }
@@ -958,12 +1015,25 @@ class _TableroViewState extends State<_TableroView> {
                 ),
               ),
             ),
-            // Ícono de lápiz en casillas iniciales vacías (mientras espera)
+            // Ícono de lápiz en casillas iniciales vacías (mientras espera);
+            // de alerta si ya no cabe ningún número en ella.
             if (esInicial && valor == null && estaEsperando)
-              const Positioned(
+              Positioned(
                 top: 6,
                 right: 6,
-                child: Icon(Icons.edit, size: 14, color: _colorTexto),
+                child:
+                    numerosParaInicial(
+                      widget.nivel,
+                      _valoresIniciales,
+                      coordenada,
+                    ).isEmpty
+                    ? Icon(
+                        Icons.warning_amber_rounded,
+                        key: const Key('alerta-sin-salida'),
+                        size: 18,
+                        color: Colors.orange.shade900,
+                      )
+                    : const Icon(Icons.edit, size: 14, color: _colorTexto),
               ),
             if (anillo != null)
               Positioned.fill(
@@ -1240,7 +1310,8 @@ class IndicadorZona extends StatelessWidget {
     final simbolo = simboloDeTipo(tipo);
 
     return Tooltip(
-      message: 'Zona ${nombreDeTipo(tipo).toLowerCase()}: '
+      message:
+          'Zona ${nombreDeTipo(tipo).toLowerCase()}: '
           '${tipo.descripcion}',
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1536,7 +1607,8 @@ class _LeyendaChips extends StatelessWidget {
     final completas = zonas.where((z) => z.estaCompleta).length;
 
     return Tooltip(
-      message: '${nombreDeTipo(tipo)}: ${tipo.descripcion}\n'
+      message:
+          '${nombreDeTipo(tipo)}: ${tipo.descripcion}\n'
           'Puntos por zona: 1º ${tipo.puntuaciones[1] ?? 0} · '
           '2º ${tipo.puntuaciones[2] ?? 0} · 3º ${tipo.puntuaciones[3] ?? 0}',
       child: Container(

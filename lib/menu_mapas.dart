@@ -2,7 +2,10 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import 'fondo.dart';
+
 import 'package:brilliant_reglas/brilliant_reglas.dart';
+
 import 'tablero_ui.dart';
 
 const _colorTexto = Color(0xFF1B3B4D);
@@ -52,103 +55,109 @@ class _MenuMapasPageState extends State<MenuMapasPage> {
   Widget build(BuildContext context) {
     final elegido = _elegido;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFE8F2ED),
-      appBar: AppBar(
-        title: const Text(
-          'Brilliant',
-          style: TextStyle(fontWeight: FontWeight.bold),
+    return FondoBrilliant(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: const Text(
+            'Brilliant',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: Colors.teal.shade700,
+          foregroundColor: Colors.white,
+          actions: widget.acciones,
         ),
-        backgroundColor: Colors.teal.shade700,
-        foregroundColor: Colors.white,
-        actions: widget.acciones,
-      ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Elige un mapa',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                    color: _colorTexto,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Toca un mapa y pulsa Jugar.',
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
-                ),
-                const SizedBox(height: 20),
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    for (final nivel in _niveles)
-                      TarjetaMapa(
-                        nivel: nivel,
-                        elegido: nivel == elegido,
-                        onTap: () => setState(() => _elegido = nivel),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: 280,
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    onPressed: elegido == null ? null : _jugar,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal.shade700,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: Colors.grey.shade300,
-                      disabledForegroundColor: Colors.grey.shade600,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    icon: const Icon(Icons.play_arrow),
-                    label: Text(
-                      elegido == null ? 'Jugar' : 'Jugar ${elegido.nombre}',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+        body: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Elige un mapa',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      color: _colorTexto,
                     ),
                   ),
-                ),
-                if (widget.alJugarEnLinea != null) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Toca un mapa y pulsa Jugar.',
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+                  ),
+                  const SizedBox(height: 20),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      for (final nivel in _niveles)
+                        TarjetaMapa(
+                          nivel: nivel,
+                          elegido: nivel == elegido,
+                          onTap: () => setState(() => _elegido = nivel),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
                   SizedBox(
                     width: 280,
                     height: 50,
-                    child: OutlinedButton.icon(
-                      onPressed: () => widget.alJugarEnLinea!(context, elegido),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.teal.shade800,
-                        side: BorderSide(color: Colors.teal.shade700, width: 2),
+                    child: ElevatedButton.icon(
+                      onPressed: elegido == null ? null : _jugar,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal.shade700,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: Colors.grey.shade300,
+                        disabledForegroundColor: Colors.grey.shade600,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      icon: const Icon(Icons.groups),
-                      label: const Text(
-                        'Jugar en línea',
-                        style: TextStyle(
+                      icon: const Icon(Icons.play_arrow),
+                      label: Text(
+                        elegido == null ? 'Jugar' : 'Jugar ${elegido.nombre}',
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
                   ),
+                  if (widget.alJugarEnLinea != null) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: 280,
+                      height: 50,
+                      child: OutlinedButton.icon(
+                        onPressed: () =>
+                            widget.alJugarEnLinea!(context, elegido),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.teal.shade800,
+                          side: BorderSide(
+                            color: Colors.teal.shade700,
+                            width: 2,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        icon: const Icon(Icons.groups),
+                        label: const Text(
+                          'Jugar en línea',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -221,7 +230,6 @@ class TarjetaMapa extends StatelessWidget {
     );
   }
 }
-
 
 /// Tablero de [nivel] en miniatura: cada casilla con el color de su zona y
 /// un punto blanco en las casillas iniciales.

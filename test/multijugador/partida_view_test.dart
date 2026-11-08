@@ -128,6 +128,44 @@ void main() {
     await cerrar(tester);
   });
 
+  testWidgets('casilla sin salida: lo explica y "Mover el N aquí" lo arregla', (tester) async {
+    await enPartida(
+      tester,
+      partidaJson(fase: 'iniciales', ronda: 0, jugadores: [
+        jugadorPartidaJson('u1', 'Ana', nivel: 4),
+        jugadorPartidaJson('u2', 'Beto', nivel: 3),
+      ]),
+    );
+    Future<void> tocar(Finder f) async {
+      await tester.ensureVisible(f);
+      await tester.tap(f);
+      await avanzar(tester);
+    }
+
+    // Orden de lectura: (0,4) (2,2) (2,5) (3,0) (5,4) y por último la naranja 1-3.
+    for (final n in [6, 2, 3]) {
+      await tocar(find.byKey(Key('tecla-$n')));
+    }
+    expect(find.byKey(const Key('aviso-anticipado')), findsNothing);
+    await tocar(find.byKey(const Key('tecla-1')));
+    expect(find.byKey(const Key('aviso-anticipado')), findsOneWidget, reason: 'avisa en cuanto pasa');
+    expect(find.byKey(const Key('alerta-sin-salida')), findsOneWidget);
+    await tocar(find.byKey(const Key('tecla-5')));
+
+    // Llegó a la naranja: ninguna tecla sirve, pero se explica y se ofrece moverlo.
+    expect(find.byKey(const Key('aviso-sin-salida')), findsOneWidget);
+    for (var n = 1; n <= 6; n++) {
+      expect(tester.widget<FilledButton>(find.byKey(Key('tecla-$n'))).onPressed, isNull);
+    }
+    await tocar(find.byKey(const Key('mover-1')));
+    expect(find.byKey(const Key('aviso-sin-salida')), findsNothing);
+    expect(mensaje(tester), contains('Faltan 1'));
+    // Quedó elegida la casilla que se vació (3,0): el 4 sí cabe.
+    await tocar(find.byKey(const Key('tecla-4')));
+    expect(mensaje(tester), contains('pulsa Confirmar'));
+    await cerrar(tester);
+  });
+
   group('dados', () {
     testWidgets('caen al empezar la ronda y marcan el ancla elegida', (tester) async {
       await enPartida(tester, partidaJson(dados: [1, 3]));

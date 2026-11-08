@@ -18,6 +18,8 @@ Tablero tableroCon(Nivel nivel, Map<Coordenada, int> celdas) {
 }
 
 void main() {
+  gruposSinSalida();
+
   group('otroDado', () {
     test('devuelve el dado que no es el ancla', () {
       expect(otroDado([2, 5], 2), 5);
@@ -102,5 +104,55 @@ void main() {
     expect(nivelPorNumero(1), same(nivel1));
     expect(nivelPorNumero(4), same(nivel4));
     expect(nivelPorNumero(99), isNull);
+  });
+}
+
+/// Mapa de prueba 1x6: cinco casillas verdes y una naranja 1-3, todas iniciales.
+final conNaranja = Nivel(
+  numero: 98,
+  construirTablero: () => tableroDesdeFilas(
+    {'v': TipoVerde(), 'n': TipoNaranjaBajo()},
+    [['v', 'v', 'v', 'v', 'v', 'n']],
+  ),
+  casillasIniciales: {for (var c = 0; c < 6; c++) Coordenada(0, c)},
+);
+
+void gruposSinSalida() {
+  group('casillas iniciales sin salida', () {
+    const naranja = Coordenada(0, 5);
+
+    test('numerosParaInicial: sin repetir y que la zona lo acepte', () {
+      expect(numerosParaInicial(conNaranja, {}, naranja), {1, 2, 3});
+      expect(numerosParaInicial(conNaranja, {const Coordenada(0, 0): 2}, naranja), {1, 3});
+      expect(numerosParaInicial(conNaranja, {const Coordenada(0, 0): 2}, const Coordenada(0, 1)),
+          {1, 3, 4, 5, 6});
+    });
+
+    test('si el 1, 2 y 3 ya se usaron, la naranja 1-3 queda sin salida y dice qué mover', () {
+      final valores = {
+        const Coordenada(0, 0): 1,
+        const Coordenada(0, 1): 2,
+        const Coordenada(0, 2): 3,
+        const Coordenada(0, 3): 4,
+      };
+      expect(numerosParaInicial(conNaranja, valores, naranja), isEmpty);
+      final b = bloqueoInicial(conNaranja, valores, naranja)!;
+      expect(b.zona.tipo, isA<TipoNaranjaBajo>());
+      expect(b.aceptaLaZona, {1, 2, 3});
+      expect(b.usadoEn, {1: const Coordenada(0, 0), 2: const Coordenada(0, 1), 3: const Coordenada(0, 2)});
+      expect(inicialesSinSalida(conNaranja, valores), [naranja]);
+
+      // Mover cualquiera de ellos lo arregla.
+      final arreglado = Map.of(valores)
+        ..remove(const Coordenada(0, 0))
+        ..[naranja] = 1;
+      expect(inicialesSinSalida(conNaranja, arreglado), isEmpty);
+      expect(numerosParaInicial(conNaranja, arreglado, const Coordenada(0, 0)), {5, 6});
+    });
+
+    test('con números disponibles no hay bloqueo', () {
+      expect(bloqueoInicial(conNaranja, {const Coordenada(0, 0): 1}, naranja), isNull);
+      expect(inicialesSinSalida(conNaranja, {const Coordenada(0, 0): 1}), isEmpty);
+    });
   });
 }

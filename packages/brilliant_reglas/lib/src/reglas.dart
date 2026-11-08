@@ -1,6 +1,7 @@
 import 'nivel.dart';
 import 'niveles.dart';
 import 'tablero.dart';
+import 'zona.dart';
 
 /// Reglas de un turno, sin estado. Las usan la app (para marcar jugadas
 /// posibles) y el servidor (para validar las jugadas del multijugador), así
@@ -84,6 +85,79 @@ String? errorEnValoresIniciales(Nivel nivel, Map<Coordenada, int> valores) {
   }
   return null;
 }
+
+/// Números (1 a 6) que se pueden poner en la casilla inicial [c], con los
+/// [valores] que ya hay en las demás: sin repetir y que la zona los acepte.
+Set<int> numerosParaInicial(Nivel nivel, Map<Coordenada, int> valores, Coordenada c) {
+  final tablero = nivel.construirTablero();
+  final zona = tablero.zonaEn(c);
+  if (zona == null) return const {};
+  final usados = {
+    for (final e in valores.entries)
+      if (e.key != c) e.value,
+  };
+  final enLaZona = [
+    for (final e in valores.entries)
+      if (e.key != c && tablero.zonaEn(e.key)?.id == zona.id) e.value,
+  ];
+  return {
+    for (var n = 1; n <= 6; n++)
+      if (!usados.contains(n) && zona.tipo.esPosibleAgregar(enLaZona, n)) n,
+  };
+}
+
+/// Por qué una casilla inicial se quedó sin ningún número posible y cómo
+/// arreglarlo.
+class BloqueoInicial {
+  /// Zona de la casilla.
+  final Zona zona;
+
+  /// Números que la zona aceptaría (si no estuvieran usados en otro lado).
+  final Set<int> aceptaLaZona;
+
+  /// Dónde está usado cada uno de esos números. Para arreglarlo basta con
+  /// mover cualquiera de ellos a esta casilla.
+  final Map<int, Coordenada> usadoEn;
+
+  const BloqueoInicial({
+    required this.zona,
+    required this.aceptaLaZona,
+    required this.usadoEn,
+  });
+}
+
+/// Si en la casilla inicial [c] ya no cabe ningún número (por ejemplo, una
+/// zona naranja 1-3 cuando el 1, el 2 y el 3 ya se usaron en otras casillas),
+/// dice por qué y qué números se podrían mover ahí. Si cabe alguno, null.
+BloqueoInicial? bloqueoInicial(Nivel nivel, Map<Coordenada, int> valores, Coordenada c) {
+  if (numerosParaInicial(nivel, valores, c).isNotEmpty) return null;
+  final tablero = nivel.construirTablero();
+  final zona = tablero.zonaEn(c);
+  if (zona == null) return null;
+  final enLaZona = [
+    for (final e in valores.entries)
+      if (e.key != c && tablero.zonaEn(e.key)?.id == zona.id) e.value,
+  ];
+  final acepta = {
+    for (var n = 1; n <= 6; n++)
+      if (zona.tipo.esPosibleAgregar(enLaZona, n)) n,
+  };
+  return BloqueoInicial(
+    zona: zona,
+    aceptaLaZona: acepta,
+    usadoEn: {
+      for (final e in valores.entries)
+        if (e.key != c && acepta.contains(e.value)) e.value: e.key,
+    },
+  );
+}
+
+/// Casillas iniciales todavía vacías en las que ya no cabe ningún número.
+/// Sirve para avisar en cuanto pasa, no recién al llegar a esa casilla.
+List<Coordenada> inicialesSinSalida(Nivel nivel, Map<Coordenada, int> valores) => [
+  for (final c in nivel.casillasIniciales)
+    if (!valores.containsKey(c) && numerosParaInicial(nivel, valores, c).isEmpty) c,
+]..sort((a, b) => a.fila != b.fila ? a.fila - b.fila : a.columna - b.columna);
 
 /// Nivel oficial con ese número, o null si no existe.
 Nivel? nivelPorNumero(int numero) {

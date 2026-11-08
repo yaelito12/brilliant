@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../aviso_sin_salida.dart';
 import '../tablero_ui.dart'
     show Dado, DadoAnimado, IndicadorZona, colorDeTipo, colorTextoTablero;
 import 'lobby_bloc.dart';
@@ -89,6 +90,9 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
                 .toSet()
           : const {},
       seleccionada: _casillaActiva(viendo.mapa!),
+      sinSalida: _poniendoIniciales
+          ? inicialesSinSalida(viendo.mapa!, _iniciales).toSet()
+          : const {},
       anclas: jugadas.anclas,
       ancla: _ancla,
       destinos: jugadas.destinos,
@@ -287,6 +291,39 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
     }
   }
 
+  /// Avisos mientras se ponen los iniciales:
+  /// - Si en la casilla elegida no cabe ningún número, explica por qué y
+  ///   ofrece "Mover el N aquí" (lo quita de su casilla y lo pone en esta).
+  /// - Si otra casilla vacía se quedó sin números posibles, avisa ya.
+  List<Widget> _avisosIniciales(Nivel nivel) {
+    final activa = _casillaActiva(nivel);
+    final bloqueo = activa == null
+        ? null
+        : bloqueoInicial(nivel, _iniciales, activa);
+    final sinSalida = inicialesSinSalida(nivel, _iniciales)..remove(activa);
+    return [
+      if (bloqueo != null) ...[
+        AvisoSinSalida(
+          bloqueo: bloqueo,
+          onMover: (n) => setState(() {
+            final origen = bloqueo.usadoEn[n]!;
+            _iniciales
+              ..remove(origen)
+              ..[activa!] = n;
+            _casillaElegida = origen; // la casilla que quedó vacía
+          }),
+        ),
+        const SizedBox(height: 10),
+      ],
+      if (sinSalida.isNotEmpty) ...[
+        AvisoAnticipado(
+          texto: avisoCasillasSinSalida(nivel.construirTablero(), sinSalida),
+        ),
+        const SizedBox(height: 10),
+      ],
+    ];
+  }
+
   /// Teclado físico: 1-6 ponen el número; Retroceso o Supr lo borran.
   KeyEventResult _alPulsarTecla(KeyEvent e, Nivel nivel) {
     if (!_poniendoIniciales || e is! KeyDownEvent)
@@ -416,6 +453,7 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
               )
             else ...[
               if (_poniendoIniciales) ...[
+                ..._avisosIniciales(viendo.mapa!),
                 TecladoIniciales(
                   permitidos: switch (_casillaActiva(viendo.mapa!)) {
                     final c? => _permitidos(viendo.mapa!, c),
@@ -536,6 +574,9 @@ class TableroMultijugador extends StatefulWidget {
 
   /// Casilla inicial a la que va el próximo número (con anillo naranja).
   final Coordenada? seleccionada;
+
+  /// Casillas iniciales vacías donde ya no cabe ningún número (con alerta).
+  final Set<Coordenada> sinSalida;
   final Set<Coordenada> anclas;
   final Coordenada? ancla;
   final Set<Coordenada> destinos;
@@ -549,6 +590,7 @@ class TableroMultijugador extends StatefulWidget {
     required this.iniciales,
     this.pendientesIniciales = const {},
     this.seleccionada,
+    this.sinSalida = const {},
     this.anclas = const {},
     this.ancla,
     this.destinos = const {},
@@ -695,6 +737,7 @@ class _TableroMultijugadorState extends State<TableroMultijugador>
             zonaCompleta: zona.estaCompleta,
             pendiente: w.pendientesIniciales.contains(c),
             seleccionada: w.seleccionada == c,
+            alerta: w.sinSalida.contains(c),
             esAnclaPosible: w.anclas.contains(c),
             esAncla: w.ancla == c,
             esDestino: w.destinos.contains(c),
@@ -715,6 +758,9 @@ class CeldaTablero extends StatelessWidget {
   final bool zonaCompleta;
   final bool pendiente;
   final bool seleccionada;
+
+  /// Casilla inicial vacía donde ya no cabe ningún número.
+  final bool alerta;
   final bool esAnclaPosible;
   final bool esAncla;
   final bool esDestino;
@@ -733,6 +779,7 @@ class CeldaTablero extends StatelessWidget {
     required this.zonaCompleta,
     required this.pendiente,
     required this.seleccionada,
+    this.alerta = false,
     required this.esAnclaPosible,
     required this.esAncla,
     required this.esDestino,
@@ -878,6 +925,17 @@ class CeldaTablero extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                 ),
+              ),
+            ),
+          if (alerta)
+            Positioned(
+              top: 2,
+              left: 2,
+              child: Icon(
+                Icons.warning_amber_rounded,
+                key: const Key('alerta-sin-salida'),
+                size: 16,
+                color: Colors.orange.shade900,
               ),
             ),
           if (seleccionada)
