@@ -18,6 +18,7 @@ Future<FakeTransporte> abrirLobby(
   Nivel? nivel,
   Map<String, Object?>? sala,
   Size tamano = pantallaAncha,
+  void Function(String mensaje)? alCerrarSesion,
 }) async {
   usarPantalla(tester, tamano);
   servidor = FakeServidor();
@@ -28,7 +29,7 @@ Future<FakeTransporte> abrirLobby(
         body: Center(
           child: ElevatedButton(
             onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => LobbyPage(bloc: bloc, nivelInicial: nivel),
+              builder: (_) => LobbyPage(bloc: bloc, nivelInicial: nivel, alCerrarSesion: alCerrarSesion),
             )),
             child: const Text('abrir'),
           ),

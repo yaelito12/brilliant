@@ -1,3 +1,4 @@
+import 'package:brilliant/auth/auth_models.dart' show mensajeSesionReemplazada;
 import 'package:brilliant/menu_mapas.dart';
 import 'package:brilliant/multijugador/conexion_multijugador.dart';
 import 'package:brilliant/multijugador/lobby_page.dart';
@@ -151,6 +152,17 @@ void main() {
     expect(tester.takeException(), isNull);
     await servidorDice(tester, ws, {'tipo': 'sala', 'sala': salaConBeto()});
     expect(tester.takeException(), isNull);
+    await cerrar(tester);
+  });
+
+  testWidgets('si se entra con la cuenta en otro dispositivo, avisa y cierra la sesión', (tester) async {
+    final avisos = <String>[];
+    final ws = await abrirLobby(tester, sala: salaConBeto(), alCerrarSesion: avisos.add);
+    ws.cortar(CodigoCierre.sesionCerrada);
+    await avanzar(tester);
+    expect(find.text('Se inició sesión con tu cuenta en otro dispositivo.'), findsOneWidget);
+    expect(avisos, [mensajeSesionReemplazada]);
+    expect(servidor.abiertos, hasLength(1), reason: 'no intenta reconectar');
     await cerrar(tester);
   });
 

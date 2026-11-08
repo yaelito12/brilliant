@@ -156,6 +156,23 @@ void main() {
     expect(servidor.abiertos.length, greaterThanOrEqualTo(2));
   });
 
+  test('sesión cerrada en otro dispositivo (4004): no reintenta', () async {
+    await iniciar();
+    servidor.ultimo.autenticar();
+    await pasa();
+    servidor.ultimo.cortar(CodigoCierre.sesionCerrada);
+    await pasa(40);
+    expect(conexion.estado, EstadoConexion.sesionCerrada);
+    expect(servidor.abiertos, hasLength(1));
+  });
+
+  test('si el token dice que la sesión se reemplazó: sesión cerrada', () async {
+    token.error = const AuthException(status: 401, code: 'sesion_reemplazada', message: 'x');
+    await iniciar();
+    expect(conexion.estado, EstadoConexion.sesionCerrada);
+    expect(servidor.abiertos, isEmpty);
+  });
+
   test('cerrar() la deja cerrada y no reintenta', () async {
     await iniciar();
     servidor.ultimo.autenticar();

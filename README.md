@@ -34,14 +34,25 @@ y qué está haciendo cada jugador; tocando a alguien se ve su tablero. Se puede
 cualquier momento. Al terminar aparecen los resultados y, si todos vuelven a pulsar "listo",
 empieza la revancha.
 
-Para probarlo en una sola computadora: arranca el servidor y abre dos copias de la app con
-cuentas distintas (por ejemplo `flutter run -d windows` y `flutter run -d chrome`).
+Solo se puede tener **una sesión abierta por cuenta**: si la cuenta está abierta en otro
+dispositivo, no deja entrar hasta que se cierre sesión allí. Si ese dispositivo se cerró sin salir
+(o se perdió), la cuenta se libera sola en unos 2,5 minutos.
+
+Para probarlo en una sola computadora, con **cuentas distintas** en Chrome y Edge:
+
+```bash
+# server/.env:  CORS_ORIGINS=http://localhost:5000,http://localhost:5001
+cd server && dart run bin/server.dart            # terminal 1
+flutter run -d chrome --web-port 5000            # terminal 2
+flutter run -d edge --web-port 5001              # terminal 3
+```
+
 Detalles del protocolo en [`server/MULTIJUGADOR.md`](server/MULTIJUGADOR.md).
 
 ## Pruebas
 
 ```bash
-cd server && dart test   # servidor: 57 pruebas
+cd server && dart test   # servidor: 72 pruebas
 cd packages/brilliant_reglas && dart test   # reglas del juego: 9 pruebas
 flutter test              # app: incluye test/auth/
 ```

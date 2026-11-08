@@ -67,6 +67,16 @@ class AuthApi {
     token: accessToken,
   );
 
+  /// Comprueba que la sesión siga abierta (GET /account/me).
+  Future<Usuario> yo(String accessToken) async {
+    final json = await _enviar('GET', '/account/me', token: accessToken);
+    try {
+      return Usuario.fromJson(json!['user'] as Map<String, dynamic>);
+    } catch (_) {
+      throw _respuestaInesperada(200);
+    }
+  }
+
   Sesion _sesion(Map<String, dynamic>? json) {
     if (json == null) throw _respuestaInesperada(200);
     try {

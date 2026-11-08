@@ -55,6 +55,9 @@ enum EstadoConexion {
   /// La sesión venció (hay que volver a iniciar sesión).
   sinSesion,
 
+  /// Se entró con la cuenta en otro dispositivo: esta sesión se cerró.
+  sesionCerrada,
+
   /// Cerrada a propósito.
   cerrada,
 }
@@ -65,6 +68,7 @@ abstract final class CodigoCierre {
   static const noAutenticado = 4001;
   static const sesionReemplazada = 4002;
   static const protocolo = 4003;
+  static const sesionCerrada = 4004;
 }
 
 /// Conexión al multijugador que se mantiene sola:
@@ -182,7 +186,9 @@ class ConexionMultijugador {
     } on AuthException catch (e) {
       if (e.esSesionInvalida) {
         _soltarTransporte();
-        return _cambiar(EstadoConexion.sinSesion);
+        return _cambiar(
+          e.esSesionReemplazada ? EstadoConexion.sesionCerrada : EstadoConexion.sinSesion,
+        );
       }
       _reintentarLuego(); // sin red para renovar el token
     } catch (_) {
@@ -220,6 +226,9 @@ class ConexionMultijugador {
     switch (codigo) {
       case CodigoCierre.sesionReemplazada:
         _cambiar(EstadoConexion.sesionReemplazada);
+      case CodigoCierre.sesionCerrada:
+        // Se entró con la cuenta en otro dispositivo: no se reintenta.
+        _cambiar(EstadoConexion.sesionCerrada);
       case CodigoCierre.noAutenticado:
         // Token rechazado: se pide uno nuevo. Si lo rechaza otra vez, la
         // sesión ya no sirve.

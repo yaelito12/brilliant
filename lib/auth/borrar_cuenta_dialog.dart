@@ -38,72 +38,68 @@ class _BorrarCuentaDialogState extends State<BorrarCuentaDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocListener<AuthBloc, AuthState>(
-      listenWhen: (antes, ahora) =>
-          antes.estado == AuthEstado.autenticado &&
-          ahora.estado != AuthEstado.autenticado,
-      listener: (context, _) => Navigator.of(context).pop(),
-      child: BlocBuilder<AuthBloc, AuthState>(
-        builder: (context, state) {
-          final error = state.error;
-          return AlertDialog(
-            title: const Text('Borrar cuenta'),
-            content: SizedBox(
-              width: 360,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Esta acción es permanente: tu cuenta se eliminará del '
-                      'servidor y no se puede deshacer.\n\n'
-                      'Escribe tu contraseña para confirmar.',
+    // Al borrarse la cuenta, AuthGate cierra este diálogo (y cualquier otra
+    // pantalla abierta) y muestra el inicio de sesión.
+    return BlocBuilder<AuthBloc, AuthState>(
+      builder: (context, state) {
+        final error = state.error;
+        return AlertDialog(
+          title: const Text('Borrar cuenta'),
+          content: SizedBox(
+            width: 360,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Esta acción es permanente: tu cuenta se eliminará del '
+                    'servidor y no se puede deshacer.\n\n'
+                    'Escribe tu contraseña para confirmar.',
+                  ),
+                  const SizedBox(height: 16),
+                  if (error != null) BannerMensaje(texto: error),
+                  Form(
+                    key: _form,
+                    child: CampoPassword(
+                      controller: _password,
+                      etiqueta: 'Contraseña',
+                      habilitado: !state.cargando,
+                      validator: validarPasswordExistente,
+                      onChanged: (_) {
+                        final bloc = context.read<AuthBloc>();
+                        if (bloc.state.hayMensajes) {
+                          bloc.add(AuthMensajesLimpiados());
+                        }
+                      },
+                      onSubmitted: (_) => _borrar(),
                     ),
-                    const SizedBox(height: 16),
-                    if (error != null) BannerMensaje(texto: error),
-                    Form(
-                      key: _form,
-                      child: CampoPassword(
-                        controller: _password,
-                        etiqueta: 'Contraseña',
-                        habilitado: !state.cargando,
-                        validator: validarPasswordExistente,
-                        onChanged: (_) {
-                          final bloc = context.read<AuthBloc>();
-                          if (bloc.state.hayMensajes) {
-                            bloc.add(AuthMensajesLimpiados());
-                          }
-                        },
-                        onSubmitted: (_) => _borrar(),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: state.cargando ? null : _cancelar,
-                child: const Text('Cancelar'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: state.cargando ? null : _cancelar,
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: state.cargando ? null : _borrar,
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.red.shade700,
               ),
-              FilledButton(
-                onPressed: state.cargando ? null : _borrar,
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.red.shade700,
-                ),
-                child: state.cargando
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Borrar mi cuenta'),
-              ),
-            ],
-          );
-        },
-      ),
+              child: state.cargando
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Borrar mi cuenta'),
+            ),
+          ],
+        );
+      },
     );
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../auth/auth_config.dart';
+import '../auth/auth_models.dart' show mensajeSesionReemplazada, mensajeSesionVencida;
 import '../auth/auth_repository.dart';
 import '../menu_mapas.dart';
 import 'conexion_multijugador.dart';
@@ -24,30 +25,39 @@ class LobbyPage extends StatelessWidget {
   /// Para las pruebas: un bloc ya creado (con una conexión falsa).
   final LobbyBloc? bloc;
 
-  const LobbyPage({super.key, this.nivelInicial, this.bloc});
+  /// Se llama si el servidor cierra la sesión (se entró con la cuenta en otro
+  /// dispositivo o venció). La app vuelve al inicio de sesión con [mensaje].
+  final void Function(String mensaje)? alCerrarSesion;
+
+  const LobbyPage({super.key, this.nivelInicial, this.bloc, this.alCerrarSesion});
 
   /// Abre el lobby conectándose al servidor con la sesión actual.
-  static Route<void> ruta(AuthRepository repo, {Nivel? nivelInicial}) =>
+  static Route<void> ruta(
+    AuthRepository repo, {
+    Nivel? nivelInicial,
+    void Function(String mensaje)? alCerrarSesion,
+  }) =>
       MaterialPageRoute(
         builder: (_) => BlocProvider(
           create: (_) => LobbyBloc(
             ConexionMultijugador(url: wsUrl, token: repo.tokenDeAcceso),
           )..add(LobbyIniciado()),
-          child: LobbyPage(nivelInicial: nivelInicial),
+          child: LobbyPage(nivelInicial: nivelInicial, alCerrarSesion: alCerrarSesion),
         ),
       );
 
   @override
   Widget build(BuildContext context) {
     final b = bloc;
-    final vista = _VistaLobby(nivelInicial: nivelInicial);
+    final vista = _VistaLobby(nivelInicial: nivelInicial, alCerrarSesion: alCerrarSesion);
     return b == null ? vista : BlocProvider.value(value: b, child: vista);
   }
 }
 
 class _VistaLobby extends StatefulWidget {
   final Nivel? nivelInicial;
-  const _VistaLobby({this.nivelInicial});
+  final void Function(String mensaje)? alCerrarSesion;
+  const _VistaLobby({this.nivelInicial, this.alCerrarSesion});
 
   @override
   State<_VistaLobby> createState() => _VistaLobbyState();
@@ -97,6 +107,16 @@ class _VistaLobbyState extends State<_VistaLobby> {
         if (!didPop) _volver(context);
       },
       child: BlocListener<LobbyBloc, LobbyState>(
+        // La sesión se cerró desde el servidor: de vuelta al inicio de sesión.
+        listenWhen: (a, b) =>
+            a.conexion != b.conexion &&
+            (b.conexion == EstadoConexion.sesionCerrada || b.conexion == EstadoConexion.sinSesion),
+        listener: (context, state) => widget.alCerrarSesion?.call(
+          state.conexion == EstadoConexion.sesionCerrada
+              ? mensajeSesionReemplazada
+              : mensajeSesionVencida,
+        ),
+        child: BlocListener<LobbyBloc, LobbyState>(
         listenWhen: (a, b) => b.aviso != null && a.aviso?.id != b.aviso!.id,
         listener: (context, state) {
           final aviso = state.aviso!;
@@ -146,6 +166,7 @@ class _VistaLobbyState extends State<_VistaLobby> {
             },
           ),
         ),
+      ),
       ),
     );
   }
@@ -259,6 +280,11 @@ class BarraConexion extends StatelessWidget {
       ),
       EstadoConexion.sinSesion => (
         'Tu sesión venció. Vuelve a iniciar sesión.',
+        Colors.red.shade700,
+        null,
+      ),
+      EstadoConexion.sesionCerrada => (
+        'Se inició sesión con tu cuenta en otro dispositivo.',
         Colors.red.shade700,
         null,
       ),
