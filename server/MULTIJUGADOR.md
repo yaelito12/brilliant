@@ -115,6 +115,7 @@ Códigos de error: `mapa_invalido`, `sala_no_encontrada`, `sala_llena`, `partida
 | No vuelve a la partida a tiempo | Cuenta como **abandono**: queda al final de la clasificación. Si solo queda un jugador, gana. |
 | Se reinicia el servidor | Las salas y partidas viven en memoria y se pierden (las cuentas no). |
 | Abre la cuenta en otra conexión | La vieja recibe el error `sesion_reemplazada` y se cierra con código 4002; la nueva conserva la sala. |
+| Intenta entrar con su cuenta en **otro dispositivo** | No se puede mientras esta conexión esté abierta (login 409 `sesion_activa`). Si cierra sesión o borra la cuenta, esta conexión recibe el error `sesion_cerrada` y el cierre 4004. |
 | Token vencido al reconectar | Cierre 4001: la app debe renovar el token (`/auth/refresh`) y volver a conectar. |
 
 ## Códigos de cierre
@@ -125,6 +126,7 @@ Códigos de error: `mapa_invalido`, `sala_no_encontrada`, `sala_llena`, `partida
 | 4001 | No autenticado (token inválido/vencido o no llegó a tiempo) | Renovar token y reconectar. |
 | 4002 | Sesión reemplazada por otra conexión | No reconectar automáticamente. |
 | 4003 | Mensaje inválido: >4 KB, binario o >20 mensajes/s | Es un error de la app. |
+| 4004 | La sesión se cerró (se entró con la cuenta en otro dispositivo, se cerró sesión o se borró la cuenta) | Volver al inicio de sesión. No reconectar. |
 | otro / sin código | Se cortó la red | Reconectar con espera creciente (1 s, 2 s, 4 s… máx. 15 s). |
 
 ## Seguridad

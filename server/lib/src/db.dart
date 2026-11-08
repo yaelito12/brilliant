@@ -62,5 +62,16 @@ Database abrirDb(String dbPath) {
       updated_at   INTEGER NOT NULL
     );
   ''');
+
+  // Motivo por el que se cerró una sesión ('otro_dispositivo' = se inició
+  // sesión con la cuenta en otro lado). Bases anteriores no tenían la columna.
+  final colsRefresh = db.select('PRAGMA table_info(refresh_tokens)');
+  if (!colsRefresh.any((c) => c['name'] == 'revoke_reason')) {
+    db.execute('ALTER TABLE refresh_tokens ADD COLUMN revoke_reason TEXT');
+  }
+  // Última señal de vida de la sesión (para saber si está en uso).
+  if (!colsRefresh.any((c) => c['name'] == 'last_seen_at')) {
+    db.execute('ALTER TABLE refresh_tokens ADD COLUMN last_seen_at INTEGER');
+  }
   return db;
 }

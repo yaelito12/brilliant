@@ -12,7 +12,7 @@ dart pub get
 cp .env.example .env
 dart run bin/gen_secret.dart   # copia el resultado en JWT_SECRET dentro de .env
 dart run bin/server.dart       # http://localhost:3000
-dart test                      # 57 pruebas
+dart test                      # 72 pruebas
 ```
 
 Requiere Dart 3.9 o superior (el que trae Flutter sirve). SQLite viene dentro del paquete
@@ -57,6 +57,7 @@ Las rutas protegidas llevan `Authorization: Bearer <accessToken>`.
 | Enumeración de usuarios | Mismo mensaje y mismo tiempo de respuesta si el nametag no existe (hash señuelo). El bloqueo también aplica a nametags inexistentes. |
 | Robo de tokens | Access token JWT de 15 min (HS256, con `iss`/`aud`/`exp`, algoritmo fijado). Refresh token aleatorio de 256 bits, **de un solo uso con rotación**: si se reutiliza uno viejo se revoca toda la sesión. |
 | Cuenta borrada | El access token se valida contra la BD en cada petición, así que deja de servir al instante. Borrar la cuenta exige la contraseña de nuevo. |
+| Cuenta abierta en dos lugares | **Una sola sesión por cuenta:** si la cuenta está en uso en otro dispositivo (conectado al multijugador o con actividad en los últimos 150 s; la app avisa cada minuto), el login responde 409 `sesion_activa`. Se revisa después de la contraseña para no revelar si alguien está conectado. Cerrar sesión libera la cuenta al instante; si el otro dispositivo se cerró sin salir, se libera sola en unos 2,5 min (así nadie queda fuera de su cuenta por perder el teléfono) y esa sesión vieja se cierra con el código `sesion_reemplazada`. El access token lleva el id de su sesión (`sid`) y deja de servir al instante cuando la sesión se cierra. |
 | Inyección / abuso | Consultas SQL con parámetros, validación de cada campo, cuerpo máximo 10 KB, cabeceras de seguridad (las mismas que `helmet`), sin `X-Powered-By`, `Cache-Control: no-store`. |
 | Tráfico en claro | En `ENV=production` (o `NODE_ENV=production`) rechaza peticiones que no lleguen por HTTPS. |
 | Mala configuración | No arranca sin `JWT_SECRET` de 32+ caracteres. Errores internos solo van al log. |

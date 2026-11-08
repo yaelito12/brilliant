@@ -45,6 +45,11 @@ class Config {
   final int trustProxy;
   final bool requireHttps;
 
+  /// Una sesión cuenta como "en uso" si dio señales de vida (la app avisa cada
+  /// minuto) en estos segundos. Mientras esté en uso no se puede entrar con
+  /// la misma cuenta en otro dispositivo.
+  final int sesionActivaSeg;
+
   const Config({
     required this.produccion,
     required this.puerto,
@@ -61,6 +66,7 @@ class Config {
     required this.corsOrigins,
     required this.trustProxy,
     required this.requireHttps,
+    this.sesionActivaSeg = 150,
   });
 
   Config copyWith({
@@ -68,6 +74,8 @@ class Config {
     int? limiteGlobal,
     int? limiteAuth,
     bool? requireHttps,
+    int? sesionActivaSeg,
+    List<String>? corsOrigins,
   }) => Config(
     produccion: produccion,
     puerto: puerto,
@@ -81,9 +89,10 @@ class Config {
     bloqueoSeg: bloqueoSeg,
     limiteGlobal: limiteGlobal ?? this.limiteGlobal,
     limiteAuth: limiteAuth ?? this.limiteAuth,
-    corsOrigins: corsOrigins,
+    corsOrigins: corsOrigins ?? this.corsOrigins,
     trustProxy: trustProxy,
     requireHttps: requireHttps ?? this.requireHttps,
+    sesionActivaSeg: sesionActivaSeg ?? this.sesionActivaSeg,
   );
 }
 
@@ -144,5 +153,6 @@ Config cargarConfig(Map<String, String> env) {
     requireHttps: requireHttps != null && requireHttps.isNotEmpty
         ? requireHttps == 'true'
         : produccion,
+    sesionActivaSeg: _entero(env['SESSION_ACTIVE_SECONDS'], 150),
   );
 }

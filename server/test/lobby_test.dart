@@ -121,8 +121,14 @@ void main() {
         maxMensajesPorSegundo: 20,
       ),
     );
-    servidorWs = ServidorWs(lobby: lobby, autenticar: app.autenticarToken);
-    app.webSocket = servidorWs.handler;
+    servidorWs = ServidorWs(
+      lobby: lobby,
+      autenticar: app.autenticarSesion,
+      sesionActiva: app.sesionActiva,
+    );
+    app
+      ..webSocket = servidorWs.handler
+      ..alCerrarSesiones = servidorWs.revisarSesiones;
     server = await shelf_io.serve(app.handler, '127.0.0.1', 0, poweredByHeader: null);
   });
 
@@ -398,6 +404,7 @@ void main() {
   });
 
   partidaPorWebSocket();
+  sesionUnica();
 }
 
 /// Iniciales válidos del nivel 1.
@@ -535,6 +542,89 @@ void partidaPorWebSocket() {
       final fin = await ana.esperar('partida_terminada');
       expect(fin['motivo'], 'rendicion');
       expect((fin['resultados'] as List).last, containsPair('estado', 'concedio'));
+    });
+  });
+}
+
+/// Intenta iniciar sesión con [nametag] (ya registrado).
+Future<http.Response> intentarLogin(String nametag) => http.post(
+  Uri.parse('http://127.0.0.1:${server.port}/auth/login'),
+  headers: {'content-type': 'application/json'},
+  body: jsonEncode({'nametag': nametag, 'password': 'clave-larga-123'}),
+);
+
+Future<http.Response> post(String ruta, {String? token, Object? cuerpo}) => http.post(
+  Uri.parse('http://127.0.0.1:${server.port}$ruta'),
+  headers: {
+    'content-type': 'application/json',
+    if (token != null) 'authorization': 'Bearer $token',
+  },
+  body: cuerpo == null ? null : jsonEncode(cuerpo),
+);
+
+/// Registra a [nametag] y devuelve su sesión completa (access y refresh).
+Future<Map<String, dynamic>> registrarSesion(String nametag) async {
+  final res = await post('/auth/register', cuerpo: {'nametag': nametag, 'password': 'clave-larga-123'});
+  expect(res.statusCode, 201, reason: res.body);
+  return jsonDecode(res.body) as Map<String, dynamic>;
+}
+
+Future<Cliente> conectarCon(String accessToken) async {
+  final c = await Cliente.abrir();
+  c.enviar({'tipo': 'auth', 'token': accessToken});
+  await c.esperar('autenticado');
+  return c;
+}
+
+void sesionUnica() {
+  group('una sola sesión por cuenta', () {
+    test('con el multijugador abierto no se puede entrar en otro dispositivo', () async {
+      final ana = await Cliente.de('Ana');
+      final beto = await Cliente.de('Beto');
+      await salaCon(ana, [beto]);
+
+      final r = await intentarLogin('Ana');
+      expect(r.statusCode, 409);
+      expect(jsonDecode(r.body)['error']['code'], 'sesion_activa');
+      ana.enviar({'tipo': 'ping'});
+      await ana.esperar('pong'); // sigue conectada, sin cambios
+    });
+
+    test('si se cerró la app sin salir, se libera sola y el token viejo deja de servir', () async {
+      final ana = await Cliente.de('Ana');
+      await ana.cerrar();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      // Pasó el tiempo sin señales de vida.
+      app.db.execute('UPDATE refresh_tokens SET last_seen_at = 1, created_at = 1');
+
+      final r = await intentarLogin('Ana');
+      expect(r.statusCode, 200);
+      final vieja = await Cliente.abrir();
+      vieja.enviar({'tipo': 'auth', 'token': await token('Ana')});
+      expect(await vieja.esperarCierre(), CodigoCierre.noAutenticado);
+      await conectarCon(jsonDecode(r.body)['accessToken'] as String);
+    });
+
+    test('cerrar sesión o borrar la cuenta corta la conexión (4004)', () async {
+      final s = await registrarSesion('Ana');
+      final ana = await conectarCon(s['accessToken'] as String);
+      await post('/auth/logout', cuerpo: {'refreshToken': s['refreshToken']});
+      await ana.esperarError('sesion_cerrada');
+      expect(await ana.esperarCierre(), CodigoCierre.sesionCerrada);
+
+      final c = await registrarSesion('Carla');
+      final carla = await conectarCon(c['accessToken'] as String);
+      await post('/account/delete', token: c['accessToken'] as String, cuerpo: {'password': 'clave-larga-123'});
+      expect(await carla.esperarCierre(), CodigoCierre.sesionCerrada);
+    });
+
+    test('las sesiones de otros usuarios no se tocan', () async {
+      final beto = await Cliente.de('Beto');
+      final s = await registrarSesion('Ana');
+      await conectarCon(s['accessToken'] as String);
+      await post('/auth/logout', cuerpo: {'refreshToken': s['refreshToken']});
+      beto.enviar({'tipo': 'ping'});
+      await beto.esperar('pong');
     });
   });
 }

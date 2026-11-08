@@ -12,6 +12,10 @@ import 'protocolo.dart';
 class _ConexionWs implements Conexion {
   final WebSocketChannel ws;
   bool cerrada = false;
+
+  /// Dueño y sesión de la conexión (después de autenticarse).
+  String? userId;
+  String? sesion;
   _ConexionWs(this.ws);
 
   @override
@@ -35,10 +39,32 @@ class _ConexionWs implements Conexion {
 /// cabeceras al WebSocket) y el token nunca va en la URL (que queda en logs).
 class ServidorWs {
   final Lobby lobby;
-  final Usuario? Function(String? token) autenticar;
+  final ({Usuario usuario, String sesion})? Function(String? token) autenticar;
+
+  /// true si la sesión sigue abierta (ver [revisarSesiones]).
+  final bool Function(String userId, String sesion) sesionActiva;
   final _abiertas = <_ConexionWs>{};
 
-  ServidorWs({required this.lobby, required this.autenticar});
+  ServidorWs({required this.lobby, required this.autenticar, required this.sesionActiva});
+
+  /// Corta las conexiones de [userId] cuya sesión ya se cerró (por ejemplo,
+  /// porque entró con su cuenta en otro dispositivo). La app recibe el
+  /// código 4004 y vuelve a la pantalla de inicio de sesión.
+  /// true si [userId] tiene una conexión abierta (cuenta como sesión en uso).
+  bool tieneConexion(String userId) =>
+      _abiertas.any((c) => c.userId == userId && !c.cerrada);
+
+  void revisarSesiones(String userId) {
+    for (final c in _abiertas.toList()) {
+      final sesion = c.sesion;
+      if (c.userId != userId || sesion == null || sesionActiva(userId, sesion)) continue;
+      c.enviar(mensajeError(
+        'sesion_cerrada',
+        'Se inició sesión con tu cuenta en otro dispositivo.',
+      ));
+      c.cerrar(CodigoCierre.sesionCerrada, 'sesion_cerrada');
+    }
+  }
 
   ConfigMultijugador get _config => lobby.config;
 
@@ -95,13 +121,16 @@ class ServidorWs {
 
         if (!autenticado) {
           final token = msg['token'];
-          final u = msg['tipo'] == 'auth' && token is String ? autenticar(token) : null;
-          if (u == null) {
+          final s = msg['tipo'] == 'auth' && token is String ? autenticar(token) : null;
+          if (s == null) {
             return cortar(CodigoCierre.noAutenticado, 'no_autenticado', 'Sesión inválida o vencida.');
           }
           autenticado = true;
           relojAuth.cancel();
-          lobby.conectar(u, con);
+          con
+            ..userId = s.usuario.id
+            ..sesion = s.sesion;
+          lobby.conectar(s.usuario, con);
           return;
         }
         if (msg['tipo'] == 'auth') return; // ya autenticado: se ignora

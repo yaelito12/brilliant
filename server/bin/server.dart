@@ -39,15 +39,22 @@ Future<void> main() async {
   final app = AppAuth(config: config, db: db);
   final ws = ServidorWs(
     lobby: Lobby(config: ConfigMultijugador.desdeEnv(env)),
-    autenticar: app.autenticarToken,
+    autenticar: app.autenticarSesion,
+    sesionActiva: app.sesionActiva,
   );
-  app.webSocket = ws.handler;
+  app
+    ..webSocket = ws.handler
+    ..alCerrarSesiones = ws.revisarSesiones
+    ..tieneConexionAbierta = ws.tieneConexion;
 
   final timer = Timer.periodic(const Duration(hours: 1), (_) => app.limpiar());
 
+  // anyIPv6 sin v6Only acepta IPv6 *e* IPv4. Hace falta porque en Windows
+  // "localhost" se resuelve primero como ::1 (IPv6): con solo IPv4 la app no
+  // encuentra el servidor.
   final server = await shelf_io.serve(
     app.handler,
-    InternetAddress.anyIPv4,
+    InternetAddress.anyIPv6,
     config.puerto,
     poweredByHeader: null, // no anunciar la tecnología del servidor
   );

@@ -16,13 +16,14 @@ late Database db;
 late Config config;
 late AppAuth app;
 
-Future<void> arrancar({int? limiteAuth, bool? requireHttps}) async {
+Future<void> arrancar({int? limiteAuth, bool? requireHttps, List<String>? corsOrigins}) async {
   config = cargarConfig({'JWT_SECRET': secret}).copyWith(
     // Argon2 liviano solo para que las pruebas corran rápido.
     argon2: const ParametrosArgon2(memoriaKiB: 1024, iteraciones: 1, paralelismo: 1),
     limiteGlobal: 10000,
     limiteAuth: limiteAuth ?? 10000,
     requireHttps: requireHttps,
+    corsOrigins: corsOrigins,
   );
   db = abrirDb(':memory:');
   app = AppAuth(config: config, db: db);
@@ -56,6 +57,18 @@ Future<Resp> api(String method, String path, {Object? body, String? token, Strin
 
 Future<Resp> registrar([String nametag = 'Ana', Map<String, Object?> extra = const {}]) =>
     api('POST', '/auth/register', body: {'nametag': nametag, 'password': pass, ...extra});
+
+/// Hace como si las sesiones abiertas no dieran señales de vida hace rato
+/// (el otro dispositivo se cerró sin salir).
+void envejecerSesiones() =>
+    db.execute('UPDATE refresh_tokens SET last_seen_at = 1, created_at = 1');
+
+/// Inicia sesión como Ana con la contraseña correcta (con las otras sesiones
+/// ya inactivas, para que no se bloquee por "sesión en uso").
+Future<Resp> entrar() {
+  envejecerSesiones();
+  return api('POST', '/auth/login', body: {'nametag': 'Ana', 'password': pass});
+}
 
 int contar(String tabla) => db.select('SELECT COUNT(*) c FROM $tabla').first['c'] as int;
 
@@ -113,7 +126,7 @@ void main() {
 
   test('login correcto e incorrecto (mismo mensaje exista o no el usuario)', () async {
     await registrar();
-    final ok = await api('POST', '/auth/login', body: {'nametag': 'Ana', 'password': pass});
+    final ok = await entrar();
     expect(ok.status, 200);
     expect(ok.json['accessToken'], isNotEmpty);
 
@@ -147,7 +160,7 @@ void main() {
       for (var i = 0; i < config.maxIntentosFallidos - 1; i++) {
         await api('POST', '/auth/login', body: {'nametag': 'Ana', 'password': 'mala-clave-123'});
       }
-      expect((await api('POST', '/auth/login', body: {'nametag': 'Ana', 'password': pass})).status, 200);
+      expect((await entrar()).status, 200);
     }
   });
 
@@ -160,16 +173,24 @@ void main() {
     expect(me.json['user']['nametag'], 'Ana');
   });
 
-  test('rechaza JWT firmado con otra clave, vencido o con alg=none', () async {
+  test('rechaza JWT firmado con otra clave, vencido, sin sesión o con alg=none', () async {
     final id = (await registrar()).json['user']['id'] as String;
+    final sid = db.select('SELECT family_id FROM refresh_tokens').first['family_id'] as String;
     final ahora = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    String firmar(String clave, int exp) =>
-        Seguridad(cargarConfig({'JWT_SECRET': clave}))
-            .firmarJwt({'sub': id, 'iss': 'brilliant-auth', 'aud': 'brilliant-app', 'exp': exp});
+    String firmar(String clave, int exp, {String? sesion = ''}) =>
+        Seguridad(cargarConfig({'JWT_SECRET': clave})).firmarJwt({
+          'sub': id,
+          'sid': sesion == '' ? sid : sesion,
+          'iss': 'brilliant-auth',
+          'aud': 'brilliant-app',
+          'exp': exp,
+        });
 
     expect((await api('GET', '/account/me', token: firmar('y' * 48, ahora + 300))).status, 401);
     expect((await api('GET', '/account/me', token: firmar(secret, ahora - 60))).status, 401);
     expect((await api('GET', '/account/me', token: firmar(secret, ahora + 300))).status, 200);
+    expect((await api('GET', '/account/me', token: firmar(secret, ahora + 300, sesion: null))).status, 401);
+    expect((await api('GET', '/account/me', token: firmar(secret, ahora + 300, sesion: 'inventada'))).status, 401);
 
     String b64(Object o) => base64Url.encode(utf8.encode(jsonEncode(o))).replaceAll('=', '');
     final none = '${b64({'alg': 'none', 'typ': 'JWT'})}.'
@@ -205,8 +226,9 @@ void main() {
 
   test('logout-all cierra todas las sesiones', () async {
     final a = (await registrar()).json;
-    final b = (await api('POST', '/auth/login', body: {'nametag': 'Ana', 'password': pass})).json;
-    expect((await api('POST', '/auth/logout-all', token: a['accessToken'])).status, 204);
+    final b = (await entrar()).json;
+    // Al entrar con b, la sesión a ya quedó cerrada: logout-all se pide desde b.
+    expect((await api('POST', '/auth/logout-all', token: b['accessToken'])).status, 204);
     expect((await api('POST', '/auth/refresh', body: {'refreshToken': a['refreshToken']})).status, 401);
     expect((await api('POST', '/auth/refresh', body: {'refreshToken': b['refreshToken']})).status, 401);
   });
@@ -223,7 +245,7 @@ void main() {
     expect(contar('refresh_tokens'), 0);
     expect((await api('GET', '/account/me', token: token)).status, 401);
     expect((await api('POST', '/auth/refresh', body: {'refreshToken': s['refreshToken']})).status, 401);
-    expect((await api('POST', '/auth/login', body: {'nametag': 'Ana', 'password': pass})).status, 401);
+    expect((await entrar()).status, 401);
     expect((await registrar()).status, 201);
   });
 
@@ -259,6 +281,32 @@ void main() {
       estados.add((await api('POST', '/auth/login', body: {'nametag': 'ana', 'password': 'x'})).status);
     }
     expect(estados, [401, 401, 401, 429, 429]);
+  });
+
+  test('CORS: también las respuestas de error llevan el permiso (si no, la web no ve el mensaje)', () async {
+    await parar();
+    await arrancar(corsOrigins: ['http://localhost:5000']);
+    Future<Map<String, String>> cabeceras(String origen, Map<String, Object?> cuerpo) async {
+      final req = http.Request('POST', Uri.parse('$base/auth/login'))
+        ..headers['content-type'] = 'application/json'
+        ..headers['origin'] = origen
+        ..body = jsonEncode(cuerpo);
+      return (await http.Response.fromStream(await req.send())).headers;
+    }
+
+    await registrar();
+    // 401 (contraseña mala), 409 (cuenta en uso) y 400 (datos inválidos).
+    for (final cuerpo in [
+      {'nametag': 'Ana', 'password': 'otra-clave-123'},
+      {'nametag': 'Ana', 'password': pass},
+      <String, Object?>{},
+    ]) {
+      final h = await cabeceras('http://localhost:5000', cuerpo);
+      expect(h['access-control-allow-origin'], 'http://localhost:5000', reason: '$cuerpo');
+    }
+    // Un origen no permitido no recibe el permiso.
+    final ajeno = await cabeceras('http://malo.com', {'nametag': 'Ana', 'password': pass});
+    expect(ajeno['access-control-allow-origin'], isNull);
   });
 
   test('con HTTPS obligatorio rechaza peticiones HTTP', () async {
@@ -315,5 +363,129 @@ void main() {
         r'$argon2id$v=19$m=1024,p=1,t=1$sVniJeSUS7Pl8ZfO0NPgjw$hJT0P8mpQaH+5qKMw0mGLNAYwr79iD8aX+KpNfjOSXI';
     expect(await conPepper.verificarPassword(deNodePepper, 'hola-123'), isTrue);
     expect(await s.verificarPassword(deNodePepper, 'hola-123'), isFalse);
+  });
+
+  group('una sola sesión por cuenta', () {
+    test('si la otra sesión ya no está en uso, entrar la cierra al instante', () async {
+      final s1 = (await registrar()).json;
+      final s2 = (await entrar()).json;
+
+      // El access token viejo deja de servir aunque no haya vencido, y dice por qué.
+      final me = await api('GET', '/account/me', token: s1['accessToken']);
+      expect(me.status, 401);
+      expect(me.json['error']['code'], 'sesion_reemplazada');
+
+      final r = await api('POST', '/auth/refresh', body: {'refreshToken': s1['refreshToken']});
+      expect(r.status, 401);
+      expect(r.json['error']['code'], 'sesion_reemplazada');
+
+      // La sesión nueva funciona y se puede renovar.
+      expect((await api('GET', '/account/me', token: s2['accessToken'])).status, 200);
+      final r2 = await api('POST', '/auth/refresh', body: {'refreshToken': s2['refreshToken']});
+      expect(r2.status, 200);
+      expect((await api('GET', '/account/me', token: r2.json['accessToken'])).status, 200);
+    });
+
+    test('cerrar sesión invalida también el access token al instante', () async {
+      final s = (await registrar()).json;
+      await api('POST', '/auth/logout', body: {'refreshToken': s['refreshToken']});
+      final me = await api('GET', '/account/me', token: s['accessToken']);
+      expect(me.status, 401);
+      expect(me.json['error']['code'], 'no_autenticado');
+    });
+
+    test('avisa al multijugador de qué usuario cerró sesiones', () async {
+      final avisados = <String>[];
+      app.alCerrarSesiones = avisados.add;
+      final s = (await registrar()).json;
+      final id = s['user']['id'] as String;
+      expect(avisados, isEmpty, reason: 'registrarse no cierra nada');
+      final s2 = (await entrar()).json;
+      await api('POST', '/auth/logout-all', token: s2['accessToken']);
+      expect(avisados, [id, id]);
+    });
+
+    test('una base sin la columna revoke_reason se actualiza sola', () {
+      final dir = Directory.systemTemp.createTempSync('brilliant-');
+      final archivo = '${dir.path}/v1.db';
+      final vieja = sqlite3.open(archivo);
+      vieja.execute('''CREATE TABLE users (id TEXT PRIMARY KEY, nametag TEXT NOT NULL,
+        nametag_lower TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at INTEGER NOT NULL);
+        CREATE TABLE refresh_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL,
+        family_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, expires_at INTEGER NOT NULL,
+        used_at INTEGER, revoked_at INTEGER, created_at INTEGER NOT NULL);
+        INSERT INTO users VALUES ('u1', 'Ana', 'ana', 'x', 1);''');
+      vieja.close();
+      final nueva = abrirDb(archivo);
+      final cols = nueva.select('PRAGMA table_info(refresh_tokens)').map((c) => c['name']);
+      expect(cols, contains('revoke_reason'));
+      expect(nueva.select('SELECT COUNT(*) c FROM users').first['c'], 1, reason: 'no se pierden cuentas');
+      nueva.close();
+      dir.deleteSync(recursive: true);
+    });
+  });
+
+  group('no se puede entrar si la cuenta está en uso en otro dispositivo', () {
+    test('con la otra sesión activa, el login se rechaza (409) y la otra sigue', () async {
+      final s1 = (await registrar()).json;
+      final r = await api('POST', '/auth/login', body: {'nametag': 'Ana', 'password': pass});
+      expect(r.status, 409);
+      expect(r.json['error']['code'], 'sesion_activa');
+      expect(r.json['error']['message'], contains('otro dispositivo'));
+      expect(r.headers['retry-after'], isNotNull);
+      expect((await api('GET', '/account/me', token: s1['accessToken'])).status, 200,
+          reason: 'la sesión abierta no se toca');
+      expect(contar('refresh_tokens'), 1, reason: 'no se creó otra sesión');
+    });
+
+    test('con contraseña incorrecta no revela que la cuenta está conectada', () async {
+      await registrar();
+      final r = await api('POST', '/auth/login', body: {'nametag': 'Ana', 'password': 'otra-clave-123'});
+      expect(r.status, 401);
+      expect(r.json['error']['code'], 'credenciales_invalidas');
+    });
+
+    test('usar la app mantiene la sesión en uso', () async {
+      final s1 = (await registrar()).json;
+      envejecerSesiones();
+      // La app avisa cada minuto (GET /account/me): vuelve a estar en uso.
+      await api('GET', '/account/me', token: s1['accessToken']);
+      final r = await api('POST', '/auth/login', body: {'nametag': 'Ana', 'password': pass});
+      expect(r.status, 409);
+    });
+
+    test('cerrar sesión libera la cuenta al instante', () async {
+      final s1 = (await registrar()).json;
+      await api('POST', '/auth/logout', body: {'refreshToken': s1['refreshToken']});
+      final r = await api('POST', '/auth/login', body: {'nametag': 'Ana', 'password': pass});
+      expect(r.status, 200);
+    });
+
+    test('si el otro dispositivo se cerró sin salir, se libera sola', () async {
+      final s1 = (await registrar()).json;
+      envejecerSesiones(); // pasaron más de 2,5 min sin señales de vida
+      final r = await api('POST', '/auth/login', body: {'nametag': 'Ana', 'password': pass});
+      expect(r.status, 200);
+      final viejo = await api('GET', '/account/me', token: s1['accessToken']);
+      expect(viejo.json['error']['code'], 'sesion_reemplazada');
+    });
+
+    test('con el multijugador abierto la cuenta está en uso', () async {
+      await registrar();
+      envejecerSesiones();
+      app.tieneConexionAbierta = (_) => true;
+      final r = await api('POST', '/auth/login', body: {'nametag': 'Ana', 'password': pass});
+      expect(r.status, 409);
+    });
+
+    test('otra cuenta no se ve afectada', () async {
+      await registrar('Ana');
+      await registrar('Beto');
+      envejecerSesiones();
+      db.execute("UPDATE refresh_tokens SET last_seen_at = ? WHERE user_id = (SELECT id FROM users WHERE nametag = 'Ana')",
+          [DateTime.now().millisecondsSinceEpoch ~/ 1000]);
+      final beto = await api('POST', '/auth/login', body: {'nametag': 'Beto', 'password': pass});
+      expect(beto.status, 200, reason: 'Ana en uso no bloquea a Beto');
+    });
   });
 }

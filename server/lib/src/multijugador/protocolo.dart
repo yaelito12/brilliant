@@ -13,6 +13,10 @@ abstract final class CodigoCierre {
   /// Mensaje demasiado grande, binario o demasiados mensajes por segundo.
   static const protocolo = 4003;
 
+  /// La sesión se cerró (se entró con la cuenta en otro dispositivo, se cerró
+  /// sesión o se borró la cuenta). La app debe volver al inicio de sesión.
+  static const sesionCerrada = 4004;
+
   /// El servidor se está apagando.
   static const apagando = 4000;
 }

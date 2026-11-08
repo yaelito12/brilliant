@@ -25,6 +25,15 @@ class AppAuth {
   /// la app porque necesita [autenticarToken].
   Handler? webSocket;
 
+  /// Se llama cuando se cierran sesiones de un usuario (otro inicio de
+  /// sesión, cerrar sesión, borrar la cuenta). El multijugador lo usa para
+  /// cortar al instante las conexiones de esas sesiones.
+  void Function(String userId)? alCerrarSesiones;
+
+  /// true si el usuario tiene una conexión abierta en el multijugador (la
+  /// asigna el servidor de partidas). Cuenta como "sesión en uso".
+  bool Function(String userId)? tieneConexionAbierta;
+
   AppAuth({required this.config, required this.db, this.webSocket})
     : seg = Seguridad(config),
       _limiteGlobal = LimitePorIp(
@@ -35,11 +44,15 @@ class AppAuth {
         ventana: const Duration(minutes: 15),
         limite: config.limiteAuth,
       ) {
-    var pipeline = const Pipeline().addMiddleware(manejarErrores());
-    if (config.requireHttps) pipeline = pipeline.addMiddleware(exigirHttps(config));
+    // CORS va por fuera de todo: así también las respuestas de error (401,
+    // 409, 429...) llevan el permiso. Si no, el navegador las bloquea y la
+    // app en la web solo ve "no se pudo conectar" en vez del mensaje real.
+    var pipeline = const Pipeline();
     if (config.corsOrigins.isNotEmpty) {
       pipeline = pipeline.addMiddleware(cors(config.corsOrigins));
     }
+    pipeline = pipeline.addMiddleware(manejarErrores());
+    if (config.requireHttps) pipeline = pipeline.addMiddleware(exigirHttps(config));
     handler = pipeline
         .addMiddleware(limitarPorIp(_limiteGlobal, config))
         .addHandler(_rutas().call);
@@ -112,36 +125,115 @@ class AppAuth {
 
   // ---------- Sesiones (access + refresh con rotación) ----------
 
+  /// Crea (o renueva, si se da [familyId]) una sesión. La "familia" de
+  /// refresh tokens es la sesión: su id va en el access token como `sid`.
   Map<String, Object?> _emitirSesion(Usuario u, [String? familyId]) {
+    final sesion = familyId ?? nuevoUuid();
     final refreshToken = seg.nuevoRefreshToken();
     db.execute(
-      '''INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, created_at)
-         VALUES (?, ?, ?, ?, ?)''',
-      [u.id, familyId ?? nuevoUuid(), seg.hashToken(refreshToken), _ahora() + config.refreshTtlSeg, _ahora()],
+      '''INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, created_at, last_seen_at)
+         VALUES (?, ?, ?, ?, ?, ?)''',
+      [u.id, sesion, seg.hashToken(refreshToken), _ahora() + config.refreshTtlSeg, _ahora(), _ahora()],
     );
     return {
-      'accessToken': seg.crearAccessToken(u.id),
+      'accessToken': seg.crearAccessToken(u.id, sesion),
       'refreshToken': refreshToken,
       'expiresIn': config.accessTtlSeg,
       'user': {'id': u.id, 'nametag': u.nametag},
     };
   }
 
-  /// Devuelve el usuario dueño de un access token, o null si no sirve.
-  /// Se consulta la base para que el token de una cuenta ya borrada deje de
-  /// servir al instante. La usan las rutas HTTP y el servidor de partidas.
-  Usuario? autenticarToken(String? token) {
-    if (token == null || !RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(token)) return null;
-    final id = seg.verificarAccessToken(token);
-    return id == null ? null : _usuarioPorId(id);
+  /// La sesión dio señales de vida (cualquier petición con su token).
+  void _marcarActividad(String sesion) => db.execute(
+    'UPDATE refresh_tokens SET last_seen_at = ? WHERE family_id = ? AND revoked_at IS NULL',
+    [_ahora(), sesion],
+  );
+
+  /// Si [userId] tiene una sesión en uso en otro dispositivo, devuelve en
+  /// cuántos segundos se liberaría sola si ese dispositivo dejara de dar
+  /// señales de vida; null si no hay ninguna en uso.
+  ///
+  /// "En uso" = conectada al multijugador, o con actividad en los últimos
+  /// [Config.sesionActivaSeg] segundos (la app avisa cada minuto). Así, si se
+  /// cierra la app sin salir o se pierde el teléfono, la cuenta se libera
+  /// sola en un par de minutos en vez de quedar bloqueada.
+  int? _segundosSesionEnUso(String userId) {
+    if (tieneConexionAbierta?.call(userId) ?? false) return config.sesionActivaSeg;
+    final visto = _fila(
+      '''SELECT MAX(COALESCE(last_seen_at, created_at)) AS visto FROM refresh_tokens
+         WHERE user_id = ? AND revoked_at IS NULL AND expires_at >= ?''',
+      [userId, _ahora()],
+    )?['visto'] as int?;
+    if (visto == null) return null;
+    final libre = visto + config.sesionActivaSeg - _ahora();
+    return libre > 0 ? libre : null;
   }
+
+  /// Sesiones viejas que ya no están en uso (app cerrada sin salir): se
+  /// cierran al entrar en otro dispositivo. Si ese dispositivo vuelve, verá
+  /// que su sesión se cerró porque se entró en otro lado.
+  void _cerrarOtrasSesiones(String userId) {
+    db.execute(
+      '''UPDATE refresh_tokens SET revoked_at = ?, revoke_reason = 'otro_dispositivo'
+         WHERE user_id = ? AND revoked_at IS NULL''',
+      [_ahora(), userId],
+    );
+  }
+
+  void _avisarSesionesCerradas(String userId) => alCerrarSesiones?.call(userId);
+
+  /// `activa`, `reemplazada` (se entró en otro dispositivo) o `cerrada`.
+  String _estadoSesion(String userId, String sesion) {
+    final filas = db.select(
+      'SELECT revoked_at, revoke_reason, expires_at FROM refresh_tokens WHERE family_id = ? AND user_id = ?',
+      [sesion, userId],
+    );
+    if (filas.any((f) => f['revoked_at'] == null && (f['expires_at'] as int) >= _ahora())) {
+      return 'activa';
+    }
+    return filas.any((f) => f['revoke_reason'] == 'otro_dispositivo') ? 'reemplazada' : 'cerrada';
+  }
+
+  /// true si la sesión [sesion] de [userId] sigue abierta.
+  bool sesionActiva(String userId, String sesion) => _estadoSesion(userId, sesion) == 'activa';
+
+  ({Usuario? usuario, String? sesion, String estado}) _resolver(String? token) {
+    const nada = (usuario: null, sesion: null, estado: 'invalido');
+    if (token == null || !RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(token)) return nada;
+    final t = seg.verificarAccessToken(token);
+    if (t == null) return nada;
+    final u = _usuarioPorId(t.userId);
+    if (u == null) return nada;
+    return (usuario: u, sesion: t.sesion, estado: _estadoSesion(u.id, t.sesion));
+  }
+
+  /// Usuario y sesión de un access token, o null si no sirve. Se consulta la
+  /// base en cada uso: si la cuenta se borró o la sesión se cerró (por
+  /// ejemplo, porque se entró en otro dispositivo) el token deja de servir al
+  /// instante, aunque todavía no haya vencido.
+  ({Usuario usuario, String sesion})? autenticarSesion(String? token) {
+    final r = _resolver(token);
+    if (r.estado != 'activa') return null;
+    _marcarActividad(r.sesion!);
+    return (usuario: r.usuario!, sesion: r.sesion!);
+  }
+
+  Usuario? autenticarToken(String? token) => autenticarSesion(token)?.usuario;
 
   Usuario _requiereAuth(Request req) {
     final m = RegExp(r'^Bearer (.+)$').firstMatch(req.headers['authorization'] ?? '');
-    final u = m == null ? null : autenticarToken(m.group(1));
-    if (u == null) throw ApiError(401, 'no_autenticado', 'Sesión inválida o vencida.');
-    return u;
+    final r = _resolver(m?.group(1));
+    if (r.estado == 'reemplazada') throw _sesionReemplazada();
+    if (r.estado != 'activa') throw ApiError(401, 'no_autenticado', 'Sesión inválida o vencida.');
+    _marcarActividad(r.sesion!);
+    return r.usuario!;
   }
+
+  ApiError _sesionReemplazada() => ApiError(
+    401,
+    'sesion_reemplazada',
+    'Se inició sesión con tu cuenta en otro dispositivo.',
+  );
 
   Handler _conLimiteAuth(Handler h) => (req) {
     final espera = _limiteAuth.registrar(ipCliente(req, config.trustProxy));
@@ -200,7 +292,7 @@ class AppAuth {
       if (e.message.contains('UNIQUE constraint failed')) throw enUso;
       rethrow;
     }
-    return respuestaJson(201, _emitirSesion(u));
+    return respuestaJson(201, _emitirSesion(u)); // cuenta nueva: no hay otras sesiones
   }
 
   Future<Response> _login(Request req) async {
@@ -223,7 +315,26 @@ class AppAuth {
     }
     _limpiarFallos(clave);
     final u = (id: fila!['id'] as String, nametag: fila['nametag'] as String);
-    return respuestaJson(200, _emitirSesion(u));
+
+    // Una sola sesión por cuenta: si está abierta y en uso en otro
+    // dispositivo, no se deja entrar. (Se revisa después de la contraseña
+    // para no revelar a nadie más si la cuenta está conectada.)
+    final enUso = _segundosSesionEnUso(u.id);
+    if (enUso != null) {
+      final minutos = (enUso / 60).ceil();
+      throw ApiError(
+        409,
+        'sesion_activa',
+        'Esta cuenta ya tiene una sesión abierta en otro dispositivo. '
+            'Cierra sesión allí para entrar aquí. Si ese dispositivo ya está '
+            'cerrado, podrás entrar en $minutos ${minutos == 1 ? 'minuto' : 'minutos'}.',
+        {'reintentarEnSegundos': enUso},
+      );
+    }
+    _cerrarOtrasSesiones(u.id);
+    final sesion = _emitirSesion(u);
+    _avisarSesionesCerradas(u.id); // corta el multijugador del dispositivo anterior
+    return respuestaJson(200, sesion);
   }
 
   Future<Response> _refresh(Request req) async {
@@ -235,6 +346,8 @@ class AppAuth {
     final resultado = _enTransaccion<({String userId, String familyId})?>(() {
       final t = _fila('SELECT * FROM refresh_tokens WHERE token_hash = ?', [hash]);
       if (t == null) return null;
+      // Sesión cerrada porque se entró en otro dispositivo: se dice tal cual.
+      if (t['revoke_reason'] == 'otro_dispositivo') throw _sesionReemplazada();
       if (t['revoked_at'] != null || t['used_at'] != null) {
         db.execute(
           'UPDATE refresh_tokens SET revoked_at = ? WHERE family_id = ? AND revoked_at IS NULL',
@@ -255,13 +368,13 @@ class AppAuth {
     if (resultado == null) throw invalido;
     final u = _usuarioPorId(resultado.userId);
     if (u == null) throw invalido;
-    return respuestaJson(200, _emitirSesion(u, resultado.familyId));
+    return respuestaJson(200, _emitirSesion(u, resultado.familyId)); // marca actividad
   }
 
   Future<Response> _logout(Request req) async {
     final refreshToken = validarRefresh(await leerJson(req));
     final t = _fila(
-      'SELECT family_id FROM refresh_tokens WHERE token_hash = ?',
+      'SELECT family_id, user_id FROM refresh_tokens WHERE token_hash = ?',
       [seg.hashToken(refreshToken)],
     );
     if (t != null) {
@@ -269,6 +382,7 @@ class AppAuth {
         'UPDATE refresh_tokens SET revoked_at = ? WHERE family_id = ? AND revoked_at IS NULL',
         [_ahora(), t['family_id']],
       );
+      _avisarSesionesCerradas(t['user_id'] as String);
     }
     return Response(204); // siempre 204: no revela si el token existía
   }
@@ -279,6 +393,7 @@ class AppAuth {
       'UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL',
       [_ahora(), u.id],
     );
+    _avisarSesionesCerradas(u.id);
     return Response(204);
   }
 
@@ -299,6 +414,7 @@ class AppAuth {
     }
     _limpiarFallos(clave);
     db.execute('DELETE FROM users WHERE id = ?', [u.id]); // ON DELETE CASCADE borra sus tokens
+    _avisarSesionesCerradas(u.id);
     return Response(204);
   }
 

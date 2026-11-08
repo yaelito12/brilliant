@@ -187,10 +187,13 @@ class Seguridad {
   List<int> _firmar(String datos) =>
       Hmac(sha256, _secretoJwt).convert(utf8.encode(datos)).bytes;
 
-  String crearAccessToken(String userId, {int? ahoraSeg}) {
+  /// [sesion] es el id de la sesión (la familia de refresh tokens). Con él se
+  /// comprueba en cada petición que la sesión siga abierta.
+  String crearAccessToken(String userId, String sesion, {int? ahoraSeg}) {
     final iat = ahoraSeg ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
     return firmarJwt({
       'sub': userId,
+      'sid': sesion,
       'iss': issuer,
       'aud': audience,
       'jti': nuevoUuid(),
@@ -206,8 +209,9 @@ class Seguridad {
     return '$datos.${base64UrlSinRelleno(_firmar(datos))}';
   }
 
-  /// Devuelve el id de usuario o null si el token no es válido o está vencido.
-  String? verificarAccessToken(String token) {
+  /// Devuelve el usuario y la sesión del token, o null si no es válido, está
+  /// vencido o no dice a qué sesión pertenece.
+  ({String userId, String sesion})? verificarAccessToken(String token) {
     try {
       final partes = token.split('.');
       if (partes.length != 3) return null;
@@ -229,7 +233,9 @@ class Seguridad {
       final aud = p['aud'];
       if (!(aud == audience || (aud is List && aud.contains(audience)))) return null;
       final sub = p['sub'];
-      return sub is String && sub.isNotEmpty ? sub : null;
+      final sid = p['sid'];
+      if (sub is! String || sub.isEmpty || sid is! String || sid.isEmpty) return null;
+      return (userId: sub, sesion: sid);
     } catch (_) {
       return null;
     }
