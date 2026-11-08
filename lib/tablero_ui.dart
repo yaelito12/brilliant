@@ -1442,7 +1442,7 @@ class _DadoElegible extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dado = _DadoAnimado(
+    final dado = DadoAnimado(
       valor: valor,
       tirada: tirada,
       retraso: retraso,
@@ -1600,7 +1600,7 @@ class _PuntosZona extends StatelessWidget {
 /// Anima un dado cayendo: baja desde arriba girando, rebota al tocar la
 /// barra y cambia de cara mientras rueda hasta mostrar [valor].
 /// Se repite cada vez que cambia [tirada] o el dado pasa de vacío a tener valor.
-class _DadoAnimado extends StatefulWidget {
+class DadoAnimado extends StatefulWidget {
   final int? valor;
   final int tirada;
   final Duration retraso;
@@ -1608,18 +1608,24 @@ class _DadoAnimado extends StatefulWidget {
   /// Dibuja el dado con la [cara] visible; [rodando] es true durante la caída.
   final Widget Function(int? cara, bool rodando) builder;
 
-  const _DadoAnimado({
+  /// Si es true, el dado también cae la primera vez que aparece (no solo
+  /// cuando cambia la tirada).
+  final bool animarAlAparecer;
+
+  const DadoAnimado({
+    super.key,
     required this.valor,
     required this.tirada,
     required this.retraso,
     required this.builder,
+    this.animarAlAparecer = false,
   });
 
   @override
-  State<_DadoAnimado> createState() => _DadoAnimadoState();
+  State<DadoAnimado> createState() => _DadoAnimadoState();
 }
 
-class _DadoAnimadoState extends State<_DadoAnimado>
+class _DadoAnimadoState extends State<DadoAnimado>
     with SingleTickerProviderStateMixin {
   static const _altura = 90.0;
 
@@ -1630,7 +1636,13 @@ class _DadoAnimadoState extends State<_DadoAnimado>
   );
 
   @override
-  void didUpdateWidget(_DadoAnimado anterior) {
+  void initState() {
+    super.initState();
+    if (widget.animarAlAparecer && widget.valor != null) _lanzar();
+  }
+
+  @override
+  void didUpdateWidget(DadoAnimado anterior) {
     super.didUpdateWidget(anterior);
     final nuevaTirada =
         widget.valor != null &&

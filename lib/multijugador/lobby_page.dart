@@ -172,40 +172,27 @@ class _VistaLobbyState extends State<_VistaLobby> {
   }
 
   Widget _sinSala(BuildContext context, LobbyState state) {
-    final puede = state.conectado && !state.esperando && _nivel != null;
+    final listo = state.conectado && !state.esperando;
     final bloc = context.read<LobbyBloc>();
 
+    // Para unirse basta el código: sin mapa elegido se juega el de quien
+    // creó la sala (se puede cambiar dentro).
     void unirse() {
-      if (!puede || _codigo.text.trim().length != 6) return;
-      bloc.add(LobbyUnirse(_codigo.text, _nivel!));
+      if (!listo || _codigo.text.trim().length != 6) return;
+      bloc.add(LobbyUnirse(_codigo.text, _nivel));
     }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const _Titulo('1. Elige tu mapa'),
-        const SizedBox(height: 12),
-        SelectorMapa(
-          elegido: _nivel,
-          onElegir: (n) => setState(() => _nivel = n),
+        const _Titulo('¿Te pasaron un código?'),
+        const SizedBox(height: 4),
+        Text(
+          'Escríbelo y entra directo a la partida de tu amigo.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.grey.shade700),
         ),
-        const SizedBox(height: 24),
-        const _Titulo('2. Crea una sala o únete a una'),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: 300,
-          height: 50,
-          child: FilledButton.icon(
-            key: const Key('crear-sala'),
-            onPressed: puede ? () => bloc.add(LobbyCrearSala(_nivel!)) : null,
-            style: FilledButton.styleFrom(backgroundColor: Colors.teal.shade700),
-            icon: const Icon(Icons.add),
-            label: const Text('Crear sala', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text('o escribe el código que te pasaron:', style: TextStyle(color: Colors.grey.shade700)),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         SizedBox(
           width: 300,
           child: Row(
@@ -237,19 +224,50 @@ class _VistaLobbyState extends State<_VistaLobby> {
               const SizedBox(width: 8),
               SizedBox(
                 height: 56,
-                child: OutlinedButton(
+                child: FilledButton(
                   key: const Key('unirse'),
-                  onPressed: puede && _codigo.text.length == 6 ? unirse : null,
+                  onPressed: listo && _codigo.text.length == 6 ? unirse : null,
+                  style: FilledButton.styleFrom(backgroundColor: Colors.teal.shade700),
                   child: const Text('Unirse'),
                 ),
               ),
             ],
           ),
         ),
+        const SizedBox(height: 28),
+        Row(
+          children: [
+            const Expanded(child: Divider()),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text('o crea tu propia sala', style: TextStyle(color: Colors.grey.shade700)),
+            ),
+            const Expanded(child: Divider()),
+          ],
+        ),
+        const SizedBox(height: 16),
+        const _Titulo('Elige tu mapa'),
+        const SizedBox(height: 12),
+        SelectorMapa(
+          elegido: _nivel,
+          onElegir: (n) => setState(() => _nivel = n),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: 300,
+          height: 50,
+          child: FilledButton.icon(
+            key: const Key('crear-sala'),
+            onPressed: listo && _nivel != null ? () => bloc.add(LobbyCrearSala(_nivel!)) : null,
+            style: FilledButton.styleFrom(backgroundColor: Colors.teal.shade700),
+            icon: const Icon(Icons.add),
+            label: const Text('Crear sala', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
+        ),
         if (_nivel == null)
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Text('Primero elige un mapa.', style: TextStyle(color: Colors.grey.shade700)),
+            child: Text('Elige un mapa para crear la sala.', style: TextStyle(color: Colors.grey.shade700)),
           ),
         if (state.esperando)
           const Padding(padding: EdgeInsets.only(top: 16), child: CircularProgressIndicator()),

@@ -19,7 +19,7 @@ Estado: **completo** (servidor y app: lobby, partida, desconexiones y resultados
 | tipo | campos | qué hace |
 |---|---|---|
 | `crear_sala` | `nivel` (1-4) | Crea una sala con código y entra en ella. |
-| `unirse` | `codigo`, `nivel` | Entra a una sala (el código no distingue mayúsculas ni espacios). |
+| `unirse` | `codigo`, `nivel` (opcional) | Entra a una sala (el código no distingue mayúsculas ni espacios). Sin `nivel` se usa el mapa de quien creó la sala. |
 | `elegir_mapa` | `nivel` | Cambia el mapa propio. Quita el "listo". |
 | `listo` | `listo` (bool) | Marca o desmarca "listo". |
 | `salir` | — | Sale de la sala. Responde `{"tipo":"saliste"}`. |

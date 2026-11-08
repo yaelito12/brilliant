@@ -49,6 +49,13 @@ void main() {
     expect(ws.enviados.last, {'tipo': 'unirse', 'codigo': 'K7M2QX', 'nivel': 3});
   });
 
+  test('unirse sin mapa no manda "nivel"', () async {
+    final ws = await conectado();
+    bloc.add(LobbyUnirse('k7m2qx', null));
+    await pasa();
+    expect(ws.enviados.last, {'tipo': 'unirse', 'codigo': 'K7M2QX'});
+  });
+
   test('un error del servidor se muestra y deja de esperar', () async {
     final ws = await conectado();
     bloc.add(LobbyUnirse('ZZZZZZ', 1));

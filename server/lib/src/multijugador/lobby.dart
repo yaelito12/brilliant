@@ -157,7 +157,8 @@ class Lobby {
         case 'crear_sala':
           _crearSala(u, c, _nivel(msg));
         case 'unirse':
-          _unirse(u, c, _codigo(msg), _nivel(msg));
+          // El mapa es opcional: basta el código para unirse.
+          _unirse(u, c, _codigo(msg), msg['nivel'] == null ? null : _nivel(msg));
         case 'elegir_mapa':
           _elegirMapa(u, _nivel(msg));
         case 'listo':
@@ -218,7 +219,9 @@ class Lobby {
     _difundir(sala, evento: {'tipo': 'creada', 'nametag': u.nametag});
   }
 
-  void _unirse(Usuario u, Conexion c, String codigo, int nivel) {
+  /// Si no se dice [nivel], el jugador empieza con el mapa de quien creó la
+  /// sala (el primero de la lista); lo puede cambiar después en el lobby.
+  void _unirse(Usuario u, Conexion c, String codigo, int? nivel) {
     final actual = _salaDe[u.id];
     if (actual != null) {
       if (actual.codigo == codigo) {
@@ -237,7 +240,7 @@ class Lobby {
     if (sala.llena) {
       throw ErrorProtocolo('sala_llena', 'La sala ya tiene ${sala.maxJugadores} jugadores.');
     }
-    sala.jugadores.add(JugadorSala(u, nivel));
+    sala.jugadores.add(JugadorSala(u, nivel ?? sala.jugadores.first.nivel));
     _salaDe[u.id] = sala;
     _difundir(sala, evento: {'tipo': 'unido', 'nametag': u.nametag});
   }

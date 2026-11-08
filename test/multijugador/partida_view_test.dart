@@ -1,4 +1,7 @@
 import 'package:brilliant/multijugador/partida_view.dart';
+import 'package:brilliant/tablero_ui.dart' show DadoAnimado;
+import 'package:brilliant_reglas/brilliant_reglas.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -25,30 +28,31 @@ String mensaje(WidgetTester tester) =>
 
 void main() {
   group('números iniciales', () {
-    testWidgets('se eligen en cada casilla y se confirman', (tester) async {
+    Finder tecla(int n) => find.byKey(Key('tecla-$n'));
+    bool activa(WidgetTester t, Finder f) => t.widget<FilledButton>(f).onPressed != null;
+
+    Future<void> pulsar(WidgetTester tester, Finder f) async {
+      await tester.ensureVisible(f);
+      await tester.tap(f);
+      await avanzar(tester);
+    }
+
+    testWidgets('con el teclado se llenan en orden: 6 toques y Confirmar', (tester) async {
       final ws = await enPartida(tester, partidaJson(fase: 'iniciales', ronda: 0));
       expect(mensaje(tester), contains('Faltan 6'));
       final confirmar = find.byKey(const Key('confirmar-iniciales'));
       expect(tester.widget<FilledButton>(confirmar).onPressed, isNull);
 
-      for (final [f, c, n] in iniciales1) {
-        await tester.tap(celda(f, c));
-        await avanzar(tester);
-        await tester.tap(find.byKey(Key('inicial-$n')));
-        await avanzar(tester);
+      await pulsar(tester, tecla(1));
+      expect(activa(tester, tecla(1)), isFalse, reason: 'el 1 ya se usó');
+      expect(mensaje(tester), contains('Faltan 5'));
+      for (var n = 2; n <= 6; n++) {
+        await pulsar(tester, tecla(n));
       }
+      // La selección avanzó sola por las casillas en orden de lectura.
       expect(mensaje(tester), contains('pulsa Confirmar'));
 
-      // Un número ya usado no se puede repetir.
-      await tester.tap(celda(0, 2));
-      await avanzar(tester);
-      expect(tester.widget<FilledButton>(find.byKey(const Key('inicial-2'))).onPressed, isNull);
-      await tester.tap(find.text('Cancelar'));
-      await avanzar(tester);
-
-      await tester.ensureVisible(confirmar);
-      await tester.tap(confirmar);
-      await avanzar(tester);
+      await pulsar(tester, confirmar);
       expect(ws.enviados.last, {'tipo': 'iniciales', 'valores': iniciales1});
 
       await servidorDice(tester, ws, {
@@ -60,6 +64,77 @@ void main() {
       });
       expect(mensaje(tester), contains('Esperando a que los demás'));
       expect(confirmar, findsNothing);
+      expect(tecla(1), findsNothing, reason: 'sin teclado una vez enviados');
+      await cerrar(tester);
+    });
+
+    testWidgets('tocar una casilla la elige para cambiarla; Borrar la vacía', (tester) async {
+      await enPartida(tester, partidaJson(fase: 'iniciales', ronda: 0));
+      for (var n = 1; n <= 6; n++) {
+        await pulsar(tester, tecla(n));
+      }
+      await pulsar(tester, celda(0, 2)); // tenía el 1
+      await pulsar(tester, find.byKey(const Key('borrar-inicial')));
+      expect(mensaje(tester), contains('Faltan 1'));
+      expect(activa(tester, tecla(1)), isTrue, reason: 'el 1 vuelve a estar libre');
+      expect(activa(tester, tecla(2)), isFalse);
+      await pulsar(tester, tecla(1));
+      expect(mensaje(tester), contains('pulsa Confirmar'));
+      await cerrar(tester);
+    });
+
+    testWidgets('"Al azar" rellena todo con números válidos', (tester) async {
+      final ws = await enPartida(tester, partidaJson(fase: 'iniciales', ronda: 0));
+      await pulsar(tester, find.byKey(const Key('al-azar')));
+      expect(mensaje(tester), contains('pulsa Confirmar'));
+      await pulsar(tester, find.byKey(const Key('confirmar-iniciales')));
+      final valores = {
+        for (final v in ws.enviados.last['valores'] as List)
+          Coordenada((v as List)[0] as int, v[1] as int): v[2] as int,
+      };
+      expect(errorEnValoresIniciales(nivel1, valores), isNull);
+      await cerrar(tester);
+    });
+
+    testWidgets('también con el teclado físico (1-6 y Retroceso)', (tester) async {
+      await enPartida(tester, partidaJson(fase: 'iniciales', ronda: 0));
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
+      await avanzar(tester);
+      expect(mensaje(tester), contains('Faltan 5'));
+      expect(activa(tester, tecla(3)), isFalse);
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit9); // se ignora
+      await avanzar(tester);
+      expect(mensaje(tester), contains('Faltan 5'));
+      await tester.tap(celda(0, 2));
+      await avanzar(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+      await avanzar(tester);
+      expect(mensaje(tester), contains('Faltan 6'));
+      await cerrar(tester);
+    });
+  });
+
+  testWidgets('elegir un ancla no hace "rebotar" otra vez su número', (tester) async {
+    await enPartida(tester, partidaJson(dados: [1, 3]));
+    double escala() => tester
+        .widgetList<Transform>(find.descendant(of: celda(0, 2), matching: find.byType(Transform)))
+        .last
+        .transform
+        .storage[0];
+    expect(escala(), 1);
+    await tester.tap(celda(0, 2));
+    await tester.pump(); // un solo cuadro, sin dejar pasar tiempo
+    expect(escala(), 1, reason: 'el número no se recrea al marcar el ancla');
+    await cerrar(tester);
+  });
+
+  group('dados', () {
+    testWidgets('caen al empezar la ronda y marcan el ancla elegida', (tester) async {
+      await enPartida(tester, partidaJson(dados: [1, 3]));
+      expect(find.byType(DadoAnimado), findsNWidgets(2));
+      await tester.tap(celda(0, 2)); // un 1: ancla
+      await avanzar(tester);
+      expect(find.text('Ancla: 1 · colocas el 3'), findsOneWidget);
       await cerrar(tester);
     });
   });

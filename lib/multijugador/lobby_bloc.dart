@@ -23,7 +23,9 @@ class LobbyCrearSala extends LobbyEvent {
 
 class LobbyUnirse extends LobbyEvent {
   final String codigo;
-  final int nivel;
+
+  /// Opcional: sin mapa se juega el de quien creó la sala.
+  final int? nivel;
   LobbyUnirse(this.codigo, this.nivel);
 }
 
@@ -148,7 +150,7 @@ class LobbyBloc extends Bloc<LobbyEvent, LobbyState> {
     on<LobbyCrearSala>((e, emit) => _pedir(emit, {'tipo': 'crear_sala', 'nivel': e.nivel}, esperar: true));
     on<LobbyUnirse>((e, emit) => _pedir(
       emit,
-      {'tipo': 'unirse', 'codigo': e.codigo.trim().toUpperCase(), 'nivel': e.nivel},
+      {'tipo': 'unirse', 'codigo': e.codigo.trim().toUpperCase(), 'nivel': ?e.nivel},
       esperar: true,
     ));
     on<LobbyElegirMapa>((e, emit) => _pedir(emit, {'tipo': 'elegir_mapa', 'nivel': e.nivel}));

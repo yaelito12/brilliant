@@ -167,6 +167,22 @@ void main() {
   });
 
   group('lobby', () {
+    test('unirse solo con el código: juega el mapa de quien creó la sala', () async {
+      final ana = await Cliente.de('Ana');
+      final beto = await Cliente.de('Beto');
+      ana.enviar({'tipo': 'crear_sala', 'nivel': 3});
+      final codigo = (await ana.esperarSala((_) => true))['codigo'] as String;
+
+      beto.enviar({'tipo': 'unirse', 'codigo': codigo});
+      final s = await beto.esperarSala((s) => jugadores(s).length == 2);
+      expect(jugador(s, 'Beto')['nivel'], 3);
+
+      // Un mapa inválido sí es un error (no se ignora).
+      final carla = await Cliente.de('Carla');
+      carla.enviar({'tipo': 'unirse', 'codigo': codigo, 'nivel': 99});
+      await carla.esperarError('mapa_invalido');
+    });
+
     test('crear sala y unirse con el código (sin importar mayúsculas)', () async {
       final ana = await Cliente.de('Ana');
       final beto = await Cliente.de('Beto');

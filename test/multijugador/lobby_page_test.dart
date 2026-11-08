@@ -15,10 +15,12 @@ void main() {
     final ws = await abrirLobby(tester);
     final crear = find.byKey(const Key('crear-sala'));
     expect(tester.widget<FilledButton>(crear).onPressed, isNull);
-    expect(find.text('Primero elige un mapa.'), findsOneWidget);
+    expect(find.text('Elige un mapa para crear la sala.'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('Nivel 2'));
     await tester.tap(find.text('Nivel 2'));
     await tester.pump();
+    await tester.ensureVisible(crear);
     await tester.tap(crear);
     await tester.pump();
     expect(ws.enviados.last, {'tipo': 'crear_sala', 'nivel': 2});
@@ -35,7 +37,7 @@ void main() {
     final unirse = find.byKey(const Key('unirse'));
     await tester.enterText(find.byKey(const Key('codigo')), 'k7m2');
     await tester.pump();
-    expect(tester.widget<OutlinedButton>(unirse).onPressed, isNull, reason: 'faltan letras');
+    expect(tester.widget<FilledButton>(unirse).onPressed, isNull, reason: 'faltan letras');
 
     await tester.enterText(find.byKey(const Key('codigo')), 'k7m2qx');
     await tester.pump();
@@ -46,6 +48,16 @@ void main() {
 
     await servidorDice(tester, ws, {'tipo': 'error', 'code': 'sala_no_encontrada', 'message': 'No existe una sala con ese código.'});
     expect(find.text('No existe una sala con ese código.'), findsOneWidget);
+    await cerrar(tester);
+  });
+
+  testWidgets('para unirse basta el código, sin elegir mapa', (tester) async {
+    final ws = await abrirLobby(tester);
+    await tester.enterText(find.byKey(const Key('codigo')), 'k7m2qx');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('unirse')));
+    await tester.pump();
+    expect(ws.enviados.last, {'tipo': 'unirse', 'codigo': 'K7M2QX'});
     await cerrar(tester);
   });
 
