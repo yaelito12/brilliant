@@ -19,7 +19,17 @@ class MenuMapasPage extends StatefulWidget {
   /// Botones extra de la barra superior (por ejemplo, el menú de la cuenta).
   final List<Widget>? acciones;
 
-  const MenuMapasPage({super.key, this.niveles, this.random, this.acciones});
+  /// Si se da, aparece el botón "Jugar en línea" (necesita sesión iniciada).
+  /// Recibe el mapa elegido, si hay uno.
+  final void Function(BuildContext context, Nivel? elegido)? alJugarEnLinea;
+
+  const MenuMapasPage({
+    super.key,
+    this.niveles,
+    this.random,
+    this.acciones,
+    this.alJugarEnLinea,
+  });
 
   @override
   State<MenuMapasPage> createState() => _MenuMapasPageState();
@@ -113,6 +123,31 @@ class _MenuMapasPageState extends State<MenuMapasPage> {
                     ),
                   ),
                 ),
+                if (widget.alJugarEnLinea != null) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: 280,
+                    height: 50,
+                    child: OutlinedButton.icon(
+                      onPressed: () => widget.alJugarEnLinea!(context, elegido),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.teal.shade800,
+                        side: BorderSide(color: Colors.teal.shade700, width: 2),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon: const Icon(Icons.groups),
+                      label: const Text(
+                        'Jugar en línea',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

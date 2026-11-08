@@ -22,6 +22,16 @@ Juego de tablero en Flutter con cuentas de usuario.
    flutter run --dart-define=API_URL=https://api.tudominio.com   # producción (HTTPS)
    ```
 
+## Jugar en línea
+
+Con la sesión iniciada, en el menú aparece **Jugar en línea**: se crea una sala (o se entra con
+un código de 6 letras), cada jugador elige su mapa y la partida empieza cuando todos (2 a 6)
+pulsan "Estoy listo". Si se corta la conexión, la app reconecta sola y vuelve a la sala.
+
+Para probarlo en una sola computadora: arranca el servidor y abre dos copias de la app con
+cuentas distintas (por ejemplo `flutter run -d windows` y `flutter run -d chrome`).
+Detalles del protocolo en [`server/MULTIJUGADOR.md`](server/MULTIJUGADOR.md).
+
 ## Pruebas
 
 ```bash

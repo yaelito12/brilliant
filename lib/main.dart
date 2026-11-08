@@ -19,9 +19,12 @@ void main() {
   );
 
   runApp(
-    BlocProvider(
-      create: (_) => AuthBloc(repositorio)..add(AuthIniciada()),
-      child: const MyApp(home: AuthGate()),
+    RepositoryProvider.value(
+      value: repositorio,
+      child: BlocProvider(
+        create: (_) => AuthBloc(repositorio)..add(AuthIniciada()),
+        child: const MyApp(home: AuthGate()),
+      ),
     ),
   );
 }
