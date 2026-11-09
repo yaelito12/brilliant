@@ -150,6 +150,7 @@ Map<String, Object?> partidaJson({
   'fase': fase,
   'ronda': ronda,
   'maxRondas': 100,
+  'puntosMeta': 26,
   'dados': fase == 'iniciales' ? null : dados,
   'msRestantes': msRestantes,
   'jugadores': jugadores ??

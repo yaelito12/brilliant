@@ -24,6 +24,15 @@ enum EstadoJugador {
   abandono,
 }
 
+/// Puntos que hay que alcanzar para ganar según cuántos [jugadores] empiezan
+/// la partida: 2 → 26, 3 → 24, 4 → 22 y 5 o más → 20.
+int puntosParaGanar(int jugadores) => switch (jugadores) {
+  <= 2 => 26,
+  3 => 24,
+  4 => 22,
+  _ => 20,
+};
+
 class ConfigPartida {
   final Duration tiempoIniciales;
   final Duration tiempoTurno;
@@ -123,6 +132,9 @@ class Partida {
   }
 
   Iterable<JugadorPartida> get _activos => jugadores.where((j) => j.activo);
+
+  /// Puntos para ganar según cuántos empezaron la partida.
+  int get puntosMeta => puntosParaGanar(jugadores.length);
 
   /// Empieza la fase de números iniciales.
   void iniciar() {
@@ -295,6 +307,9 @@ class Partida {
     });
     _completadasEnRonda.clear();
 
+    // Se revisa al cerrar la ronda (todos juegan a la vez con los mismos
+    // dados): si varios llegan en la misma ronda, gana el de más puntos.
+    if (_activos.any((j) => j.puntos >= puntosMeta)) return _terminar('meta_puntos');
     if (_activos.any((j) => j.completo)) return _terminar('tablero_completo');
     if (ronda >= config.maxRondas) return _terminar('max_rondas');
     _nuevaRonda(pasaronPorTiempo: pasaronPorTiempo);
@@ -411,6 +426,7 @@ class Partida {
       'fase': fase.name,
       'ronda': ronda,
       'maxRondas': config.maxRondas,
+      'puntosMeta': puntosMeta,
       'dados': dados,
       'msRestantes': limite == null
           ? null

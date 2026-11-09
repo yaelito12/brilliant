@@ -31,7 +31,7 @@ Future<FakeApi> abrir(WidgetTester tester) async {
   t.api.onBorrar = (_, __) async {};
   return t.api;
 }
-
+ 
 Finder campo(int i) => find.byType(TextFormField).at(i);
 
 Future<void> iniciarSesion(WidgetTester tester) async {

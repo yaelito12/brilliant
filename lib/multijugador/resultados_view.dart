@@ -33,6 +33,7 @@ class TarjetaResultados extends StatelessWidget {
     }
 
     final motivo = switch (resultados.motivo) {
+      'meta_puntos' => 'Alguien llegó a la meta de puntos.',
       'tablero_completo' => 'Alguien completó su tablero.',
       'max_rondas' => 'Se acabaron las rondas.',
       'rendicion' => 'Los demás se rindieron.',

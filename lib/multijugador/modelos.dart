@@ -136,6 +136,9 @@ class PartidaInfo {
   final String fase;
   final int ronda;
   final int maxRondas;
+
+  /// Puntos con los que se gana (depende de cuántos jugadores empezaron).
+  final int puntosMeta;
   final List<int>? dados;
 
   /// Cuándo se acaba el turno (o el tiempo para los iniciales), según el
@@ -147,6 +150,7 @@ class PartidaInfo {
     required this.fase,
     required this.ronda,
     required this.maxRondas,
+    required this.puntosMeta,
     required this.dados,
     required this.limite,
     required this.jugadores,
@@ -161,6 +165,7 @@ class PartidaInfo {
       fase: j['fase'] as String,
       ronda: j['ronda'] as int,
       maxRondas: j['maxRondas'] as int,
+      puntosMeta: j['puntosMeta'] as int,
       dados: (j['dados'] as List?)?.cast<int>(),
       limite: ms == null ? null : (recibido ?? DateTime.now()).add(Duration(milliseconds: ms)),
       jugadores: [
@@ -214,7 +219,7 @@ class ResultadoInfo {
 
 /// Clasificación final de una partida.
 class ResultadosPartida {
-  /// `tablero_completo`, `max_rondas`, `rendicion` o `abandono`.
+  /// `meta_puntos`, `tablero_completo`, `max_rondas`, `rendicion` o `abandono`.
   final String motivo;
   final List<ResultadoInfo> lista;
 

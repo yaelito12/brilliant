@@ -54,7 +54,7 @@ Estado: **completo** (servidor y app: lobby, partida, desconexiones y resultados
 ```json
 {
   "fase": "iniciales" | "jugando" | "terminada",
-  "ronda": 3, "maxRondas": 100, "dados": [2, 5], "msRestantes": 41250,
+  "ronda": 3, "maxRondas": 100, "puntosMeta": 26, "dados": [2, 5], "msRestantes": 41250,
   "jugadores": [{
     "id": "...", "nametag": "Ana", "nivel": 2,
     "estado": "jugando" | "concedio" | "abandono",

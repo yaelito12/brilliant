@@ -416,6 +416,11 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
                   CuentaRegresiva(limite: p.limite!),
               ],
             ),
+            Text(
+              'Gana quien llegue a ${p.puntosMeta} puntos',
+              key: const Key('meta-puntos'),
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
             if (p.jugando && dados != null) ...[
               const SizedBox(height: 10),
               DadosRonda(

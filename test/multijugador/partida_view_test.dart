@@ -181,6 +181,7 @@ void main() {
     testWidgets('elegir ancla y destino manda la jugada', (tester) async {
       final ws = await enPartida(tester, partidaJson(dados: [1, 3]));
       expect(find.text('Ronda 1 de 100'), findsOneWidget);
+      expect(find.text('Gana quien llegue a 26 puntos'), findsOneWidget);
       expect(mensaje(tester), 'Toca un 1 o un 3 de tu tablero como ancla.');
 
       await tester.tap(celda(0, 0)); // casilla vacía: no hace nada

@@ -245,6 +245,47 @@ void main() {
       expect(() => m.enviar('beto', 'pasar'), errorProtocolo('no_es_momento'));
     });
 
+    test('la meta de puntos depende de cuántos juegan', () {
+      expect([for (var n = 2; n <= 7; n++) puntosParaGanar(n)], [26, 24, 22, 20, 20, 20]);
+      m = Mesa(['ana', 'beto', 'carla']);
+      expect(m.partida.puntosMeta, 24);
+      expect(m.partida.toJson()['puntosMeta'], 24);
+    });
+
+    Nivel conZonaB(int puntosB) => Nivel(
+      numero: 1,
+      construirTablero: () => tableroDesdeFilas(
+        {'a': TipoVerde(), 'b': TipoVerde(puntos(puntosB, 1, 1)), 'c': TipoVerde()},
+        [['a', 'a', 'a', 'a', 'a', 'a', 'b', 'c']],
+      ),
+      casillasIniciales: mini.casillasIniciales,
+    );
+
+    void jugarRonda1(Nivel nivel) {
+      m = Mesa(['ana', 'beto'], nivel: nivel, random: DadosFijos([6, 1]));
+      m.enviar('ana', 'iniciales', {'valores': inicialesMini});
+      m.enviar('beto', 'iniciales', {'valores': inicialesMini});
+      m.enviar('ana', 'jugada', {'ancla': [0, 5], 'destino': [0, 6]});
+      m.enviar('beto', 'pasar');
+    }
+
+    test('gana el primero que llega a la meta (2 jugadores: 26)', () {
+      jugarRonda1(conZonaB(22)); // ana: 4 (zona a) + 22 = 26
+      expect(m.partida.fase, FasePartida.terminada);
+      expect(m.partida.motivoFin, 'meta_puntos');
+      expect(m.partida.resultados!.map((r) => [r['nametag'], r['posicion'], r['puntos']]), [
+        ['ana', 1, 26],
+        ['beto', 2, 4],
+      ]);
+    });
+
+    test('sin llegar a la meta la partida sigue', () {
+      jugarRonda1(conZonaB(21)); // ana: 25
+      expect(m.j('ana').puntos, 25);
+      expect(m.partida.fase, FasePartida.jugando);
+      expect(m.partida.ronda, 2);
+    });
+
     test('límite de rondas', () {
       m = Mesa(['ana', 'beto'], config: const ConfigPartida(maxRondas: 2));
       m.enviar('ana', 'iniciales', {'valores': iniciales1});
