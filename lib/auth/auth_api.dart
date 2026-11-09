@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 
 import 'auth_models.dart';
 
-/// Cliente HTTP del servidor de autenticación (carpeta `server/`).
+/// Cliente HTTP del servidor de autenticación (proyecto aparte `brilliant_server`).
 class AuthApi {
   final String baseUrl;
   final Duration timeout;

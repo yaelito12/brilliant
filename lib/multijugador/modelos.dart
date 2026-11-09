@@ -1,5 +1,5 @@
 /// Datos del lobby y de la partida tal como los manda el servidor
-/// (ver server/MULTIJUGADOR.md).
+/// (ver MULTIJUGADOR.md en brilliant_server).
 library;
 
 import 'package:brilliant_reglas/brilliant_reglas.dart';

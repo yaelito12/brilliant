@@ -62,7 +62,7 @@ enum EstadoConexion {
   cerrada,
 }
 
-/// Códigos de cierre del servidor (ver server/MULTIJUGADOR.md).
+/// Códigos de cierre del servidor (ver MULTIJUGADOR.md en brilliant_server).
 abstract final class CodigoCierre {
   static const apagando = 4000;
   static const noAutenticado = 4001;

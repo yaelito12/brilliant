@@ -1,8 +1,0 @@
-.dart_tool/
-build/
-data/
-.env
-*.db
-*.db-wal
-*.db-shm
-*.exe
