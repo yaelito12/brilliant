@@ -2,10 +2,8 @@
 // de la regla, puntos del 1º, 2º y 3º y palomita al llenar la zona.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:brilliant/niveles.dart';
-import 'package:brilliant/tablero.dart';
+import 'package:brilliant_reglas/brilliant_reglas.dart';
 import 'package:brilliant/tablero_ui.dart';
-import 'package:brilliant/tipo.dart';
 
 import 'helpers/widget_helpers.dart';
 
@@ -184,6 +182,60 @@ void main() {
             of: indicadoresDe(TipoGris()), matching: find.byIcon(Icons.done)),
         findsOneWidget,
       );
+
+      // Se tachan los puntos ganados (el 1º lugar jugando solo), y solo esos.
+      Finder punto(int lugar) => find.descendant(
+            of: indicadoresDe(TipoGris()),
+            matching: find.byWidgetPredicate((w) =>
+                w.key is ValueKey<String> &&
+                (w.key as ValueKey<String>).value.startsWith('puntos-') &&
+                (w.key as ValueKey<String>).value.endsWith('-$lugar')),
+          );
+      Finder raya(int lugar) =>
+          find.descendant(of: punto(lugar), matching: find.byType(Transform));
+      expect(raya(1), findsOneWidget);
+      expect(raya(2), findsNothing);
+      expect(raya(3), findsNothing);
+    });
+  });
+
+  group('Ícono del ancla', () {
+    /// Abre el Nivel 2, pone los iniciales y elige el 1 de (0,4) como ancla.
+    Future<void> elegirAncla(WidgetTester tester, Size tamano) async {
+      await abrirMapa(tester, 'Nivel 2', dados: [1, 3, 6, 3, 2, 2], tamano: tamano);
+      final iniciales = {
+        const Coordenada(0, 4): 1,
+        const Coordenada(2, 0): 2,
+        const Coordenada(3, 2): 3,
+        const Coordenada(4, 5): 4,
+        const Coordenada(5, 1): 5,
+        const Coordenada(6, 4): 6,
+      };
+      for (final MapEntry(key: c, value: n) in iniciales.entries) {
+        await ponerNumeroEn(tester, c, n);
+      }
+      await pulsar(tester, 'Comenzar juego');
+      await tirarDados(tester);
+      await tocarCelda(tester, const Coordenada(0, 4));
+    }
+
+    bool hayBrillo(WidgetTester tester) => tester
+        .widgetList<Container>(find.byType(Container))
+        .any((c) =>
+            c.decoration is BoxDecoration &&
+            ((c.decoration as BoxDecoration).boxShadow ?? [])
+                .any((s) => s.color == colorBrilloAncla));
+
+    testWidgets('en pantalla ancha se ve el ícono', (tester) async {
+      await elegirAncla(tester, pantallaAncha);
+      expect(find.byIcon(Icons.anchor), findsOneWidget);
+      expect(hayBrillo(tester), isFalse);
+    });
+
+    testWidgets('en el teléfono no tapa el número: brillo en vez de ícono', (tester) async {
+      await elegirAncla(tester, pantallaAngosta);
+      expect(find.byIcon(Icons.anchor), findsNothing);
+      expect(hayBrillo(tester), isTrue);
     });
   });
 }

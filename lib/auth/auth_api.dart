@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 
 import 'auth_models.dart';
 
-/// Cliente HTTP del servidor de autenticación (carpeta `server/`).
+/// Cliente HTTP del servidor de autenticación (proyecto aparte `brilliant_server`).
 class AuthApi {
   final String baseUrl;
   final Duration timeout;
@@ -66,6 +66,16 @@ class AuthApi {
     cuerpo: {'password': password},
     token: accessToken,
   );
+
+  /// Comprueba que la sesión siga abierta (GET /account/me).
+  Future<Usuario> yo(String accessToken) async {
+    final json = await _enviar('GET', '/account/me', token: accessToken);
+    try {
+      return Usuario.fromJson(json!['user'] as Map<String, dynamic>);
+    } catch (_) {
+      throw _respuestaInesperada(200);
+    }
+  }
 
   Sesion _sesion(Map<String, dynamic>? json) {
     if (json == null) throw _respuestaInesperada(200);

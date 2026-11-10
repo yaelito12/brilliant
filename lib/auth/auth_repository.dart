@@ -52,11 +52,37 @@ class AuthRepository {
     } on AuthException catch (e) {
       if (e.status == 401) {
         await _limpiar();
+        // Si se cerró porque se entró en otro dispositivo, se avisa.
+        if (e.esSesionReemplazada) rethrow;
         return null;
       }
       rethrow;
     }
   }
+
+  /// Comprueba con el servidor que la sesión siga abierta. Lanza una
+  /// [AuthException] con `esSesionInvalida` si ya no (por ejemplo, porque se
+  /// entró con la cuenta en otro dispositivo); en ese caso borra la sesión local.
+  Future<void> verificarSesion() async {
+    var token = await _tokenDeAcceso();
+    try {
+      await _api.yo(token);
+    } on AuthException catch (e) {
+      if (e.esSesionReemplazada) {
+        await _limpiar();
+        rethrow;
+      }
+      if (e.status != 401) rethrow;
+      // Access token rechazado: se renueva una vez (si la sesión se cerró, la
+      // renovación falla y lo dice).
+      token = await _renovar();
+      await _api.yo(token);
+    }
+  }
+
+  /// Borra la sesión de este dispositivo sin avisar al servidor (cuando el
+  /// servidor ya la cerró).
+  Future<void> cerrarSesionLocal() => _limpiar();
 
   /// Siempre cierra la sesión local, aunque el servidor no responda.
   Future<void> cerrarSesion() async {
@@ -86,8 +112,10 @@ class AuthRepository {
   }
 
   /// Token de acceso vigente (lo renueva si está por vencer). Es lo que
-  /// presentará la app al conectarse a una partida online.
-  Future<String> tokenDeAcceso() => _tokenDeAcceso();
+  /// presenta la app al conectarse al multijugador. Con [forzarRenovacion]
+  /// pide uno nuevo aunque el actual no haya vencido (el servidor lo rechazó).
+  Future<String> tokenDeAcceso({bool forzarRenovacion = false}) =>
+      forzarRenovacion ? _renovar() : _tokenDeAcceso();
 
   Future<String> _tokenDeAcceso() async {
     final token = _accessToken;
@@ -113,6 +141,7 @@ class AuthRepository {
     } on AuthException catch (e) {
       if (e.status == 401) {
         await _limpiar();
+        if (e.esSesionReemplazada) rethrow;
         throw const AuthException.sesionExpirada();
       }
       rethrow;

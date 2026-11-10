@@ -1,4 +1,4 @@
-import '../tablero.dart';
+import 'package:brilliant_reglas/brilliant_reglas.dart';
 
 abstract class PartidaEvent {}
 

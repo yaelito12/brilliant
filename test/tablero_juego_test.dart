@@ -1,7 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:brilliant/nivel1.dart';
-import 'package:brilliant/tablero.dart';
-import 'package:brilliant/tipo.dart';
+import 'package:brilliant_reglas/brilliant_reglas.dart';
 
 void main() {
   group('Tablero de juego', () {

@@ -5,6 +5,7 @@ import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
 import 'auth_widgets.dart';
+import '../teclado_web.dart';
 import 'validadores.dart';
 
 class LoginPage extends StatefulWidget {
@@ -19,11 +20,13 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _form = GlobalKey<FormState>();
   final _nametag = TextEditingController();
+  final _focoNametag = FocusNode();
   final _password = TextEditingController();
 
   @override
   void dispose() {
     _nametag.dispose();
+    _focoNametag.dispose();
     _password.dispose();
     super.dispose();
   }
@@ -63,7 +66,9 @@ class _LoginPageState extends State<LoginPage> {
                   children: [
                     TextFormField(
                       controller: _nametag,
-                      enabled: !state.cargando,
+                      focusNode: _focoNametag,
+                      onTap: () => reabrirTecladoAlTocar(_focoNametag),
+                      readOnly: state.cargando, // no enabled: ver CampoPassword
                       textInputAction: TextInputAction.next,
                       autofillHints: const [AutofillHints.username],
                       autocorrect: false,

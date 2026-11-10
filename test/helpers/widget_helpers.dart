@@ -8,8 +8,7 @@ import 'package:brilliant/bloc/partida_bloc.dart';
 import 'package:brilliant/bloc/partida_state.dart';
 import 'package:brilliant/main.dart';
 import 'package:brilliant/menu_mapas.dart';
-import 'package:brilliant/nivel1.dart';
-import 'package:brilliant/tablero.dart';
+import 'package:brilliant_reglas/brilliant_reglas.dart';
 
 /// Color de texto/contornos que usa la interfaz (_colorTexto en tablero_ui).
 const colorTexto = Color(0xFF1B3B4D);

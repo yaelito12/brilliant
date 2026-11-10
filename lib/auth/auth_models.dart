@@ -78,7 +78,12 @@ class AuthException implements Exception {
   bool get esSesionInvalida =>
       code == 'refresh_invalido' ||
       code == 'sesion_expirada' ||
-      code == 'no_autenticado';
+      code == 'no_autenticado' ||
+      esSesionReemplazada;
+
+  /// Se inició sesión con la cuenta en otro dispositivo (solo se permite una
+  /// sesión a la vez).
+  bool get esSesionReemplazada => code == 'sesion_reemplazada';
 
   /// Texto listo para mostrar al usuario.
   String get mensajeParaUsuario {
@@ -94,3 +99,11 @@ class AuthException implements Exception {
   @override
   String toString() => 'AuthException($status, $code, $message)';
 }
+
+/// Aviso que ve el dispositivo cuya sesión se cerró porque se entró con la
+/// misma cuenta en otro lado.
+const mensajeSesionReemplazada =
+    'Se inició sesión con tu cuenta en otro dispositivo, así que aquí se cerró. '
+    'Solo se puede usar una sesión a la vez.';
+
+const mensajeSesionVencida = 'Tu sesión venció. Inicia sesión de nuevo.';

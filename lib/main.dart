@@ -19,9 +19,17 @@ void main() {
   );
 
   runApp(
-    BlocProvider(
-      create: (_) => AuthBloc(repositorio)..add(AuthIniciada()),
-      child: const MyApp(home: AuthGate()),
+    RepositoryProvider.value(
+      value: repositorio,
+      child: BlocProvider(
+        create: (_) => AuthBloc(
+          repositorio,
+          // Si se entra con la cuenta en otro dispositivo, este se entera en
+          // menos de un minuto aunque no esté en el multijugador.
+          verificarCada: const Duration(minutes: 1),
+        )..add(AuthIniciada()),
+        child: const MyApp(home: AuthGate()),
+      ),
     ),
   );
 }

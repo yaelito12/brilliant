@@ -4,22 +4,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:brilliant/tablero.dart';
+import 'package:brilliant_reglas/brilliant_reglas.dart';
 import 'package:brilliant/bloc/juego_bloc.dart';
 import 'package:brilliant/bloc/juego_state.dart';
 import 'package:brilliant/bloc/partida_bloc.dart';
 import 'package:brilliant/menu_mapas.dart';
-import 'package:brilliant/nivel1.dart';
 import 'package:brilliant/tablero_ui.dart';
-import 'package:brilliant/tipo.dart';
 
 import 'helpers/widget_helpers.dart';
 
 /// Tipo que la interfaz no conoce, para probar los valores por defecto.
 class _TipoDesconocido extends Tipo {
-  @override
-  Color get color => const Color(0xFF000000);
-
   @override
   String get descripcion => 'Tipo de prueba';
 

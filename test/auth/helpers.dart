@@ -26,6 +26,15 @@ class FakeApi extends AuthApi {
   Future<void> Function()? onLogout;
   Future<void> Function(String token, String password)? onBorrar;
 
+  /// Comprobación de sesión (GET /account/me). Por defecto, sesión abierta.
+  Future<Usuario> Function(String token)? onYo;
+
+  @override
+  Future<Usuario> yo(String accessToken) {
+    llamadas.add('yo:$accessToken');
+    return (onYo ?? (_) async => usuarioAna)(accessToken);
+  }
+
   @override
   Future<Sesion> registrar({
     required String nametag,

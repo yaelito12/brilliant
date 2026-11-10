@@ -2,10 +2,8 @@
 // dibuja, sus casillas iniciales y una partida corta en la fila azul.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:brilliant/nivel3.dart';
-import 'package:brilliant/tablero.dart';
+import 'package:brilliant_reglas/brilliant_reglas.dart';
 import 'package:brilliant/tablero_ui.dart';
-import 'package:brilliant/tipo.dart';
 
 import 'helpers/widget_helpers.dart';
 
