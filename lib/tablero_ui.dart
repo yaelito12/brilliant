@@ -279,9 +279,14 @@ class _TableroViewState extends State<_TableroView> {
                     AvisoSinSalida(bloqueo: sinSalida, onMover: moverAqui),
                   ],
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: List.generate(6, (i) {
+                  // En pantallas muy angostas la fila completa se encoge en
+                  // vez de recortar los últimos círculos.
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: 10,
+                      children: List.generate(6, (i) {
                       final numero = i + 1;
                       final estaOcupado = bloqueado(numero);
                       final esSeleccionado = valorActual == numero;
@@ -305,20 +310,25 @@ class _TableroViewState extends State<_TableroView> {
                                 : null,
                           ),
                           child: Center(
-                            child: Text(
-                              '$numero',
-                              style: TextStyle(
-                                color: estaOcupado
-                                    ? Colors.grey.shade500
-                                    : Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                '$numero',
+                                style: TextStyle(
+                                  color: estaOcupado
+                                      ? Colors.grey.shade500
+                                      : Colors.white,
+                                  fontSize: 22,
+                                  height: 1,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       );
-                    }),
+                      }),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   TextButton.icon(
@@ -1037,22 +1047,34 @@ class _TableroViewState extends State<_TableroView> {
         ),
         child: Stack(
           children: [
-            // Número (inicial o colocado)
-            Center(
-              child: Text(
-                valor != null ? '$valor' : '',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: esInicial ? FontWeight.w900 : FontWeight.w700,
-                  fontStyle: esInicial ? FontStyle.italic : FontStyle.normal,
-                  color: const Color(0xFF1B3B4D),
-                  shadows: [
-                    Shadow(
-                      color: Colors.white.withValues(alpha: 0.8),
-                      offset: const Offset(1, 1),
-                      blurRadius: 1,
+            // Número (inicial o colocado). En casillas chicas (teléfono) el
+            // texto se encoge para no salir cortado por los bordes.
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.all(3),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    valor != null ? '$valor' : '',
+                    style: TextStyle(
+                      fontSize: 22,
+                      height: 1,
+                      fontWeight: esInicial
+                          ? FontWeight.w900
+                          : FontWeight.w700,
+                      fontStyle: esInicial
+                          ? FontStyle.italic
+                          : FontStyle.normal,
+                      color: const Color(0xFF1B3B4D),
+                      shadows: [
+                        Shadow(
+                          color: Colors.white.withValues(alpha: 0.8),
+                          offset: const Offset(1, 1),
+                          blurRadius: 1,
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -1382,12 +1404,17 @@ class IndicadorZona extends StatelessWidget {
                   ],
                 ),
                 alignment: Alignment.center,
-                child: Text(
-                  simbolo,
-                  style: TextStyle(
-                    fontSize: simbolo.length > 1 ? 12 : 17,
-                    fontWeight: FontWeight.w900,
-                    color: _colorTexto,
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    simbolo,
+                    style: TextStyle(
+                      fontSize: simbolo.length > 1 ? 12 : 17,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                      color: _colorTexto,
+                    ),
                   ),
                 ),
               ),
@@ -1458,13 +1485,18 @@ class _PuntoLugar extends StatelessWidget {
       width: 14,
       height: 14,
       alignment: Alignment.center,
+      padding: const EdgeInsets.all(1.5),
       decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      child: Text(
-        '$puntos',
-        style: const TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          '$puntos',
+          style: const TextStyle(
+            fontSize: 9,
+            height: 1,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
       ),
     );
