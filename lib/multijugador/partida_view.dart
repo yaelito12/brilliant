@@ -8,7 +8,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../aviso_sin_salida.dart';
 import '../tablero_ui.dart'
-    show Dado, DadoAnimado, IndicadorZona, colorDeTipo, colorTextoTablero;
+    show
+        Dado,
+        DadoAnimado,
+        IndicadorZona,
+        colorBrilloAncla,
+        colorDeTipo,
+        colorTextoTablero,
+        tamanoMinimoParaIconos;
 import 'lobby_bloc.dart';
 import 'modelos.dart';
 
@@ -34,11 +41,8 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
   Coordenada? _ancla;
   final Map<Coordenada, int> _iniciales = {};
 
-  /// Casilla inicial elegida a mano (null = la primera vacía).
+  /// Casilla inicial que el jugador tocó (null = ninguna).
   Coordenada? _casillaElegida;
-
-  /// Jugador cuyo tablero se está viendo (null = el mío).
-  String? _viendo;
 
   PartidaInfo get _partida => widget.state.partida!;
   JugadorPartidaInfo? get _yo => widget.state.yoEnPartida;
@@ -56,7 +60,6 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
   bool get _puedoJugar {
     final yo = _yo;
     return yo != null &&
-        _viendo == null &&
         yo.activo &&
         !yo.yaJugo &&
         !yo.completo &&
@@ -68,7 +71,8 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
   @override
   Widget build(BuildContext context) {
     final yo = _yo;
-    final viendo = (_viendo == null ? null : _partida.jugador(_viendo!)) ?? yo;
+    // Solo se ve el tablero propio: el de los demás no se muestra.
+    final viendo = yo;
     if (viendo == null || viendo.mapa == null) {
       return const Center(child: Text('Ya no participas en esta partida.'));
     }
@@ -96,17 +100,13 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
       anclas: jugadas.anclas,
       ancla: _ancla,
       destinos: jugadas.destinos,
+      lugares: viendo.lugares,
       onTap: _puedoJugar ? (c) => _tocar(context, c, viendo, tablero) : null,
     );
     final panel = _panel(context, viendo, jugadas.anclas);
     final marcador = Marcador(
       partida: _partida,
-      yoId: yo?.id,
-      viendo: viendo.id,
-      onElegir: (id) => setState(() {
-        _viendo = id == yo?.id ? null : id;
-        _ancla = null;
-      }),
+      yoId: viendo.id,
     );
 
     final nivel = viendo.mapa!;
@@ -201,8 +201,8 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
   }
 
   // ---------------------------------------------------------------------------
-  // Números iniciales: se elige una casilla (o la primera vacía) y se toca un
-  // número del teclado; la selección pasa sola a la siguiente casilla vacía.
+  // Números iniciales: se toca una casilla y luego un número del teclado.
+  // Nada se selecciona solo: tras poner el número la casilla queda libre.
   // ---------------------------------------------------------------------------
 
   bool get _poniendoIniciales => _puedoJugar && _partida.enIniciales;
@@ -213,26 +213,9 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
       (a, b) => a.fila != b.fila ? a.fila - b.fila : a.columna - b.columna,
     );
 
-  /// Casilla a la que va el próximo número.
-  Coordenada? _casillaActiva(Nivel n) {
-    if (!_poniendoIniciales) return null;
-    final elegida = _casillaElegida;
-    if (elegida != null) return elegida;
-    for (final c in _orden(n)) {
-      if (!_iniciales.containsKey(c)) return c;
-    }
-    return null;
-  }
-
-  Coordenada? _siguienteVacia(Nivel n, Coordenada desde) {
-    final orden = _orden(n);
-    final i = orden.indexOf(desde);
-    for (var k = 1; k <= orden.length; k++) {
-      final c = orden[(i + k) % orden.length];
-      if (!_iniciales.containsKey(c)) return c;
-    }
-    return null;
-  }
+  /// Casilla a la que va el próximo número: solo la que el jugador tocó.
+  Coordenada? _casillaActiva(Nivel n) =>
+      _poniendoIniciales ? _casillaElegida : null;
 
   /// Números que se pueden poner en [c]: sin repetir y que su zona los acepte.
   Set<int> _permitidos(Nivel nivel, Coordenada c) {
@@ -257,7 +240,7 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
     if (c == null || !_permitidos(nivel, c).contains(numero)) return;
     setState(() {
       _iniciales[c] = numero;
-      _casillaElegida = _siguienteVacia(nivel, c);
+      _casillaElegida = null;
     });
   }
 
@@ -310,7 +293,7 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
             _iniciales
               ..remove(origen)
               ..[activa!] = n;
-            _casillaElegida = origen; // la casilla que quedó vacía
+            _casillaElegida = null;
           }),
         ),
         const SizedBox(height: 10),
@@ -353,9 +336,7 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
     final esMio = viendo.id == yo?.id;
 
     final String mensaje;
-    if (!esMio) {
-      mensaje = 'Estás viendo el tablero de ${viendo.nametag}.';
-    } else if (p.terminada) {
+    if (p.terminada) {
       mensaje = 'La partida terminó.';
     } else if (!(yo?.activo ?? false)) {
       mensaje = yo?.estado == 'concedio'
@@ -366,7 +347,9 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
       mensaje = yo!.yaJugo
           ? 'Listo. Esperando a que los demás pongan sus números…'
           : faltan > 0
-          ? 'Toca un número para la casilla marcada (del 1 al 6, sin repetir). Faltan $faltan.'
+          ? _casillaElegida == null
+                ? 'Toca una casilla inicial y luego un número (del 1 al 6, sin repetir). Faltan $faltan.'
+                : 'Toca un número para la casilla marcada (del 1 al 6, sin repetir). Faltan $faltan.'
           : 'Revisa tus números y pulsa Confirmar.';
     } else if (yo!.completo) {
       mensaje =
@@ -450,13 +433,7 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
                 ),
               ),
             const SizedBox(height: 10),
-            if (!esMio)
-              OutlinedButton.icon(
-                onPressed: () => setState(() => _viendo = null),
-                icon: const Icon(Icons.person),
-                label: const Text('Volver a mi tablero'),
-              )
-            else ...[
+            ...[
               if (_poniendoIniciales) ...[
                 ..._avisosIniciales(viendo.mapa!),
                 TecladoIniciales(
@@ -587,6 +564,9 @@ class TableroMultijugador extends StatefulWidget {
   final Set<Coordenada> destinos;
   final void Function(Coordenada c)? onTap;
 
+  /// Lugar con el que se llenó cada zona (para tachar esos puntos).
+  final Map<String, int> lugares;
+
   const TableroMultijugador({
     super.key,
     required this.nivel,
@@ -600,6 +580,7 @@ class TableroMultijugador extends StatefulWidget {
     this.ancla,
     this.destinos = const {},
     this.onTap,
+    this.lugares = const {},
   });
 
   @override
@@ -655,7 +636,11 @@ class _TableroMultijugadorState extends State<TableroMultijugador>
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           for (final id in ids)
-            if (t.zonas[id] != null) IndicadorZona(zona: t.zonas[id]!),
+            if (t.zonas[id] != null)
+              IndicadorZona(
+                zona: t.zonas[id]!,
+                lugarObtenido: widget.lugares[id],
+              ),
         ],
       ),
     );
@@ -793,7 +778,14 @@ class CeldaTablero extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    // En casillas chicas (teléfono) los íconos de ancla y lápiz taparían el
+    // número: se quitan y la casilla se marca con borde y brillo.
+    builder: (context, medidas) =>
+        _celda(chica: medidas.maxWidth < tamanoMinimoParaIconos),
+  );
+
+  Widget _celda({required bool chica}) {
     final latido = Curves.easeInOut.transform(pulso);
 
     // Contorno según lo que se puede hacer con la casilla.
@@ -839,6 +831,12 @@ class CeldaTablero extends StatelessWidget {
             blurRadius: esAncla ? 6 : 2,
             offset: Offset(0, esAncla ? 3 : 1),
           ),
+          if (esAncla && chica)
+            const BoxShadow(
+              color: colorBrilloAncla,
+              blurRadius: 8,
+              spreadRadius: 2,
+            ),
           if (seleccionada || esDestino)
             BoxShadow(
               color: (seleccionada ? Colors.orange : Colors.white).withValues(
@@ -943,13 +941,13 @@ class CeldaTablero extends StatelessWidget {
                 color: Colors.orange.shade900,
               ),
             ),
-          if (seleccionada)
+          if (seleccionada && !chica)
             const Positioned(
               top: 3,
               right: 3,
               child: Icon(Icons.edit, size: 12, color: colorTextoTablero),
             ),
-          if (esAncla)
+          if (esAncla && !chica)
             const Positioned(
               top: 3,
               right: 3,
@@ -1120,20 +1118,12 @@ class TecladoIniciales extends StatelessWidget {
 }
 
 /// Marcador: todos los jugadores ordenados por puntos, con lo que está
-/// haciendo cada uno. Tocar a alguien muestra su tablero.
+/// haciendo cada uno. El tablero de los demás no se puede ver.
 class Marcador extends StatelessWidget {
   final PartidaInfo partida;
   final String? yoId;
-  final String viendo;
-  final ValueChanged<String> onElegir;
 
-  const Marcador({
-    super.key,
-    required this.partida,
-    required this.yoId,
-    required this.viendo,
-    required this.onElegir,
-  });
+  const Marcador({super.key, required this.partida, required this.yoId});
 
   @override
   Widget build(BuildContext context) {
@@ -1163,8 +1153,6 @@ class Marcador extends StatelessWidget {
             ListTile(
               key: Key('marcador-${j.nametag}'),
               dense: true,
-              selected: j.id == viendo,
-              onTap: () => onElegir(j.id),
               leading: CircleAvatar(
                 radius: 16,
                 backgroundColor: j.activo && j.conectado
@@ -1178,7 +1166,7 @@ class Marcador extends StatelessWidget {
                   fontWeight: j.id == yoId ? FontWeight.bold : FontWeight.w500,
                 ),
               ),
-              subtitle: Text('Nivel ${j.nivel} · ${_estado(j)}'),
+              subtitle: Text(_estado(j)),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

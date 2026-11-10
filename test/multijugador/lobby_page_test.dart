@@ -32,7 +32,7 @@ void main() {
     await cerrar(tester);
   });
 
-  testWidgets('unirse con código: lo pasa a mayúsculas y lo manda con el mapa', (tester) async {
+  testWidgets('unirse con código: lo pasa a mayúsculas y no manda mapa', (tester) async {
     final ws = await abrirLobby(tester, nivel: nivel4);
     final unirse = find.byKey(const Key('unirse'));
     await tester.enterText(find.byKey(const Key('codigo')), 'k7m2');
@@ -44,7 +44,7 @@ void main() {
     expect(find.text('K7M2QX'), findsOneWidget);
     await tester.tap(unirse);
     await tester.pump();
-    expect(ws.enviados.last, {'tipo': 'unirse', 'codigo': 'K7M2QX', 'nivel': 4});
+    expect(ws.enviados.last, {'tipo': 'unirse', 'codigo': 'K7M2QX'});
 
     await servidorDice(tester, ws, {'tipo': 'error', 'code': 'sala_no_encontrada', 'message': 'No existe una sala con ese código.'});
     expect(find.text('No existe una sala con ese código.'), findsOneWidget);
@@ -88,6 +88,18 @@ void main() {
     await avanzar(tester);
     expect(ws.enviados.last, {'tipo': 'salir'});
     expect(find.byKey(const Key('crear-sala')), findsOneWidget);
+    await cerrar(tester);
+  });
+
+  testWidgets('si no soy el anfitrión solo veo qué mapa se juega', (tester) async {
+    await abrirLobby(tester, sala: salaJson(jugadores: [
+      jugadorJson('u2', 'Beto', nivel: 3),
+      jugadorJson('u1', 'Ana', nivel: 3),
+    ]));
+    expect(find.text('Anfitrión'), findsOneWidget);
+    expect(find.byType(SelectorMapa), findsNothing, reason: 'no hay mapas para elegir');
+    expect(find.text('Mapa de la sala'), findsNothing);
+    expect(find.text('Mapa: Nivel 3'), findsOneWidget);
     await cerrar(tester);
   });
 

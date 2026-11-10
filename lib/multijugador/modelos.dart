@@ -58,6 +58,12 @@ class SalaInfo {
   bool get enLobby => estado == 'lobby';
   bool get jugando => estado == 'jugando';
   bool get llena => jugadores.length >= maxJugadores;
+
+  /// Quien creó la sala (el primero): es el único que puede cambiar el mapa.
+  JugadorEnSala? get anfitrion => jugadores.isEmpty ? null : jugadores.first;
+
+  /// Mapa de la sala: todos juegan el mismo.
+  int? get nivel => anfitrion?.nivel;
   int get listos => jugadores.where((j) => j.listo).length;
 
   JugadorEnSala? jugador(String id) {

@@ -37,19 +37,42 @@ void main() {
       await avanzar(tester);
     }
 
-    testWidgets('con el teclado se llenan en orden: 6 toques y Confirmar', (tester) async {
+    /// Toca la casilla (f, c) y luego la tecla [n].
+    Future<void> poner(WidgetTester tester, int f, int c, int n) async {
+      await pulsar(tester, celda(f, c));
+      await pulsar(tester, tecla(n));
+    }
+
+    Future<void> ponerTodos(WidgetTester tester) async {
+      for (final [f, c, n] in iniciales1) {
+        await poner(tester, f, c, n);
+      }
+    }
+
+    testWidgets('nada se selecciona solo: casilla y luego número', (tester) async {
       final ws = await enPartida(tester, partidaJson(fase: 'iniciales', ronda: 0));
+      expect(mensaje(tester), contains('Toca una casilla inicial'));
       expect(mensaje(tester), contains('Faltan 6'));
       final confirmar = find.byKey(const Key('confirmar-iniciales'));
       expect(tester.widget<FilledButton>(confirmar).onPressed, isNull);
-
-      await pulsar(tester, tecla(1));
-      expect(activa(tester, tecla(1)), isFalse, reason: 'el 1 ya se usó');
-      expect(mensaje(tester), contains('Faltan 5'));
-      for (var n = 2; n <= 6; n++) {
-        await pulsar(tester, tecla(n));
+      for (var n = 1; n <= 6; n++) {
+        expect(activa(tester, tecla(n)), isFalse, reason: 'sin casilla elegida no hay teclas');
       }
-      // La selección avanzó sola por las casillas en orden de lectura.
+
+      await pulsar(tester, celda(0, 2));
+      expect(mensaje(tester), contains('casilla marcada'));
+      await pulsar(tester, tecla(1));
+      expect(mensaje(tester), contains('Faltan 5'));
+      // Tras poner el número no se elige otra casilla sola.
+      expect(mensaje(tester), contains('Toca una casilla inicial'));
+      expect(activa(tester, tecla(2)), isFalse);
+
+      await pulsar(tester, celda(1, 5));
+      expect(activa(tester, tecla(1)), isFalse, reason: 'el 1 ya se usó');
+      await pulsar(tester, tecla(2));
+      for (final [f, c, n] in iniciales1.skip(2)) {
+        await poner(tester, f, c, n);
+      }
       expect(mensaje(tester), contains('pulsa Confirmar'));
 
       await pulsar(tester, confirmar);
@@ -70,9 +93,7 @@ void main() {
 
     testWidgets('tocar una casilla la elige para cambiarla; Borrar la vacía', (tester) async {
       await enPartida(tester, partidaJson(fase: 'iniciales', ronda: 0));
-      for (var n = 1; n <= 6; n++) {
-        await pulsar(tester, tecla(n));
-      }
+      await ponerTodos(tester);
       await pulsar(tester, celda(0, 2)); // tenía el 1
       await pulsar(tester, find.byKey(const Key('borrar-inicial')));
       expect(mensaje(tester), contains('Faltan 1'));
@@ -98,6 +119,11 @@ void main() {
 
     testWidgets('también con el teclado físico (1-6 y Retroceso)', (tester) async {
       await enPartida(tester, partidaJson(fase: 'iniciales', ronda: 0));
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
+      await avanzar(tester);
+      expect(mensaje(tester), contains('Faltan 6'), reason: 'sin casilla elegida no pone nada');
+      await tester.tap(celda(0, 2));
+      await avanzar(tester);
       await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
       await avanzar(tester);
       expect(mensaje(tester), contains('Faltan 5'));
@@ -143,16 +169,24 @@ void main() {
     }
 
     // Orden de lectura: (0,4) (2,2) (2,5) (3,0) (5,4) y por último la naranja 1-3.
-    for (final n in [6, 2, 3]) {
+    final orden = nivel4.casillasIniciales.toList()
+      ..sort((a, b) => a.fila != b.fila ? a.fila - b.fila : a.columna - b.columna);
+    Future<void> poner(int i, int n) async {
+      await tocar(celda(orden[i].fila, orden[i].columna));
       await tocar(find.byKey(Key('tecla-$n')));
     }
+
+    await poner(0, 6);
+    await poner(1, 2);
+    await poner(2, 3);
     expect(find.byKey(const Key('aviso-anticipado')), findsNothing);
-    await tocar(find.byKey(const Key('tecla-1')));
+    await poner(3, 1);
     expect(find.byKey(const Key('aviso-anticipado')), findsOneWidget, reason: 'avisa en cuanto pasa');
     expect(find.byKey(const Key('alerta-sin-salida')), findsOneWidget);
-    await tocar(find.byKey(const Key('tecla-5')));
+    await poner(4, 5);
 
-    // Llegó a la naranja: ninguna tecla sirve, pero se explica y se ofrece moverlo.
+    // En la naranja ninguna tecla sirve, pero se explica y se ofrece moverlo.
+    await tocar(celda(orden[5].fila, orden[5].columna));
     expect(find.byKey(const Key('aviso-sin-salida')), findsOneWidget);
     for (var n = 1; n <= 6; n++) {
       expect(tester.widget<FilledButton>(find.byKey(Key('tecla-$n'))).onPressed, isNull);
@@ -160,8 +194,8 @@ void main() {
     await tocar(find.byKey(const Key('mover-1')));
     expect(find.byKey(const Key('aviso-sin-salida')), findsNothing);
     expect(mensaje(tester), contains('Faltan 1'));
-    // Quedó elegida la casilla que se vació (3,0): el 4 sí cabe.
-    await tocar(find.byKey(const Key('tecla-4')));
+    // La casilla que se vació (3,0) no queda elegida sola: se toca y el 4 sí cabe.
+    await poner(3, 4);
     expect(mensaje(tester), contains('pulsa Confirmar'));
     await cerrar(tester);
   });
@@ -264,7 +298,7 @@ void main() {
   });
 
   group('marcador', () {
-    testWidgets('ordena por puntos y permite ver el tablero de otro', (tester) async {
+    testWidgets('ordena por puntos y no deja ver el tablero de otro', (tester) async {
       await enPartida(tester, partidaJson(jugadores: [
         jugadorPartidaJson('u1', 'Ana', puntos: 4, celdas: iniciales1),
         jugadorPartidaJson('u2', 'Beto', nivel: 3, puntos: 11, conectado: false),
@@ -281,13 +315,9 @@ void main() {
       await tester.ensureVisible(find.byKey(const Key('marcador-Beto')));
       await tester.tap(find.byKey(const Key('marcador-Beto')));
       await avanzar(tester);
-      expect(mensaje(tester), 'Estás viendo el tablero de Beto.');
-      expect(find.byKey(const Key('pasar')), findsNothing);
-
-      await tester.ensureVisible(find.text('Volver a mi tablero'));
-      await tester.tap(find.text('Volver a mi tablero'));
-      await avanzar(tester);
-      expect(mensaje(tester), startsWith('Toca'));
+      expect(mensaje(tester), startsWith('Toca'), reason: 'sigue en su propio tablero');
+      expect(find.byKey(const Key('pasar')), findsOneWidget);
+      expect(find.textContaining('Estás viendo'), findsNothing);
       await cerrar(tester);
     });
   });

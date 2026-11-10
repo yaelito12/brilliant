@@ -25,11 +25,11 @@ Juego de tablero en Flutter con cuentas de usuario.
 ## Jugar en línea
 
 Con la sesión iniciada, en el menú aparece **Jugar en línea**: se crea una sala (o se entra con
-un código de 6 letras), cada jugador elige su mapa y la partida empieza cuando todos (2 a 6)
-pulsan "Estoy listo". Si se corta la conexión, la app reconecta sola y vuelve a la sala.
+un código de 6 letras). Todos juegan el mismo mapa: lo elige quien crea la sala, y solo esa
+persona lo puede cambiar. La partida empieza cuando todos (2 a 6) pulsan "Estoy listo". Si se corta la conexión, la app reconecta sola y vuelve a la sala.
 
 En la partida cada uno juega **su propio tablero con los mismos dados**: pone sus 6 números
-iniciales y en cada ronda coloca un número o pasa (60 s por ronda). El marcador muestra los puntos
+iniciales (se toca una casilla y luego el número) y en cada ronda coloca un número o pasa (60 s por ronda). El marcador muestra los puntos
 y qué está haciendo cada jugador; tocando a alguien se ve su tablero. Se puede **rendir** en
 cualquier momento. Al terminar aparecen los resultados y, si todos vuelven a pulsar "listo",
 empieza la revancha.

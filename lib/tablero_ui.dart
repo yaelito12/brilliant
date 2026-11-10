@@ -969,6 +969,41 @@ class _TableroViewState extends State<_TableroView> {
       );
     }
 
+    return LayoutBuilder(
+      builder: (context, medidas) {
+        // En casillas chicas (teléfono) el ícono del ancla taparía el
+        // número: se quita y el ancla se marca con un brillo alrededor.
+        final chica = medidas.maxWidth < tamanoMinimoParaIconos;
+        return _celdaConTamano(
+          context,
+          coordenada: coordenada,
+          valor: valor,
+          esInicial: esInicial,
+          estaEsperando: estaEsperando,
+          esAnclaSeleccionada: esAnclaSeleccionada,
+          colorBase: colorBase,
+          borde: borde,
+          anillo: anillo,
+          bordeUniforme: bordeUniforme,
+          chica: chica,
+        );
+      },
+    );
+  }
+
+  Widget _celdaConTamano(
+    BuildContext context, {
+    required Coordenada coordenada,
+    required int? valor,
+    required bool esInicial,
+    required bool estaEsperando,
+    required bool esAnclaSeleccionada,
+    required Color colorBase,
+    required BoxBorder borde,
+    required Color? anillo,
+    required bool bordeUniforme,
+    required bool chica,
+  }) {
     return GestureDetector(
       onTap: () => _alTocarCelda(context, coordenada),
       // Sin animación: interpolar entre un borde uniforme con esquinas
@@ -986,12 +1021,18 @@ class _TableroViewState extends State<_TableroView> {
             ],
           ),
           border: borde,
-          boxShadow: const [
-            BoxShadow(
+          boxShadow: [
+            const BoxShadow(
               color: Colors.black26,
               blurRadius: 2,
               offset: Offset(1, 1),
             ),
+            if (esAnclaSeleccionada && chica)
+              const BoxShadow(
+                color: colorBrilloAncla,
+                blurRadius: 8,
+                spreadRadius: 2,
+              ),
           ],
         ),
         child: Stack(
@@ -1044,8 +1085,8 @@ class _TableroViewState extends State<_TableroView> {
                   ),
                 ),
               ),
-            // Ícono de ancla en la casilla seleccionada
-            if (esAnclaSeleccionada)
+            // Ícono de ancla en la casilla seleccionada (solo si cabe)
+            if (esAnclaSeleccionada && !chica)
               const Positioned(
                 top: 6,
                 right: 6,
@@ -1298,16 +1339,22 @@ String simboloDeTipo(Tipo tipo) {
 
 /// Indicador de una zona al lado del tablero: cuadro de su color con el
 /// símbolo de su regla y, debajo, los puntos del 1º, 2º y 3º en llenarla.
-/// Cuando la zona está llena lleva una palomita.
+/// Cuando la zona está llena lleva una palomita y se tachan los puntos que
+/// se ganaron con ella; los otros lugares se apagan.
 class IndicadorZona extends StatelessWidget {
   final Zona zona;
 
-  const IndicadorZona({super.key, required this.zona});
+  /// Lugar (1, 2 o 3) con el que se llenó la zona. Si es null y la zona
+  /// está llena, se toma el 1º (jugando solo siempre se gana el 1º).
+  final int? lugarObtenido;
+
+  const IndicadorZona({super.key, required this.zona, this.lugarObtenido});
 
   @override
   Widget build(BuildContext context) {
     final tipo = zona.tipo;
     final simbolo = simboloDeTipo(tipo);
+    final obtenido = zona.estaCompleta ? (lugarObtenido ?? 1) : null;
 
     return Tooltip(
       message:
@@ -1367,28 +1414,87 @@ class IndicadorZona extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (final lugar in [1, 2, 3])
-                Container(
-                  width: 14,
-                  height: 14,
-                  margin: const EdgeInsets.symmetric(horizontal: 0.5),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: lugar == 1 ? _colorTexto : Colors.grey.shade500,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Text(
-                    '${tipo.puntuaciones[lugar] ?? 0}',
-                    style: const TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
+                _PuntoLugar(
+                  key: Key('puntos-${zona.id}-$lugar'),
+                  puntos: tipo.puntuaciones[lugar] ?? 0,
+                  color: switch (obtenido) {
+                    null => lugar == 1 ? _colorTexto : Colors.grey.shade500,
+                    final o when o == lugar => Colors.teal.shade700,
+                    _ => Colors.grey.shade300,
+                  },
+                  tachado: obtenido == lugar,
                 ),
             ],
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Casillas más angostas que esto (teléfono) no llevan íconos de ancla ni de
+/// lápiz encima: taparían el número. Se marcan con borde y brillo.
+const tamanoMinimoParaIconos = 56.0;
+
+/// Brillo oscuro alrededor del ancla en casillas chicas (en vez del ícono).
+const colorBrilloAncla = Color(0xCC1B3B4D);
+
+/// Circulito con los puntos de un lugar; [tachado] = son los que se ganaron.
+class _PuntoLugar extends StatelessWidget {
+  final int puntos;
+  final Color color;
+  final bool tachado;
+
+  const _PuntoLugar({
+    super.key,
+    required this.puntos,
+    required this.color,
+    required this.tachado,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final circulo = Container(
+      width: 14,
+      height: 14,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      child: Text(
+        '$puntos',
+        style: const TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 0.5),
+      child: tachado
+          ? Stack(
+              clipBehavior: Clip.none,
+              children: [
+                circulo,
+                // Raya diagonal, como al tachar en la hoja de papel. Va
+                // posicionada para no agrandar el circulito (14 × 14).
+                Positioned(
+                  left: -2.5,
+                  top: 5.75,
+                  child: Transform.rotate(
+                    angle: -0.8,
+                    child: Container(
+                      width: 19,
+                      height: 2.5,
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade700,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : circulo,
     );
   }
 }

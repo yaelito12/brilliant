@@ -1,5 +1,7 @@
 // Pruebas de la interfaz de cuenta: crear cuenta, iniciar sesión y borrar cuenta.
 // Usan el AuthBloc real con una API falsa (sin red).
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +11,7 @@ import 'package:brilliant/auth/auth_models.dart';
 import 'package:brilliant/bloc/auth_bloc.dart';
 import 'package:brilliant/bloc/auth_event.dart';
 import 'package:brilliant/main.dart';
+import 'package:brilliant/teclado_web.dart';
 
 import '../helpers/widget_helpers.dart' show usarPantalla, pantallaAncha;
 import 'helpers.dart';
@@ -78,6 +81,78 @@ void main() {
     await iniciarSesion(tester);
     expect(find.text('Nametag o contraseña incorrectos.'), findsOneWidget);
     expect(find.text('Elige un mapa'), findsNothing);
+  });
+
+  group('corregir la contraseña (Android web)', () {
+    EditableText editable(WidgetTester tester) => tester.widget<EditableText>(
+      find.descendant(of: campo(1), matching: find.byType(EditableText)),
+    );
+
+    testWidgets('mientras espera al servidor no se deshabilita, solo no deja escribir', (
+      tester,
+    ) async {
+      final api = await abrir(tester);
+      final respuesta = Completer<Sesion>();
+      api.onLogin = () => respuesta.future;
+      await tester.enterText(campo(0), 'Ana');
+      await tester.enterText(campo(1), 'clave-mal');
+      await tester.tap(find.text('Entrar'));
+      await tester.pump();
+
+      final campoTexto = tester.widget<TextField>(
+        find.descendant(of: campo(1), matching: find.byType(TextField)),
+      );
+      expect(campoTexto.enabled, isNot(isFalse));
+      expect(editable(tester).readOnly, isTrue);
+      expect(editable(tester).focusNode.hasFocus, isTrue, reason: 'no pierde el foco');
+
+      respuesta.completeError(errorApi(
+        401,
+        'credenciales_invalidas',
+        'Nametag o contraseña incorrectos.',
+      ));
+      await tester.pumpAndSettle();
+      expect(editable(tester).readOnly, isFalse);
+      await tester.enterText(campo(1), 'clave-larga-123');
+      expect(find.text('clave-larga-123'), findsOneWidget);
+    });
+
+    // El fallo es del navegador (el teclado de prueba de Flutter no lo tiene),
+    // así que se comprueba lo que hace el arreglo: soltar y retomar el foco,
+    // que obliga al navegador a enfocar de nuevo su campo y abrir el teclado.
+    Future<List<bool>> cambiosDeFocoAlRetocar(WidgetTester tester, {required bool movil}) async {
+      forzarNavegadorMovil = movil;
+      addTearDown(() => forzarNavegadorMovil = null);
+      await abrir(tester);
+      await tester.tap(campo(1));
+      await tester.pump();
+      final nodo = editable(tester).focusNode;
+      expect(nodo.hasFocus, isTrue);
+
+      final cambios = <bool>[];
+      void escuchar() => cambios.add(nodo.hasFocus);
+      nodo.addListener(escuchar);
+      addTearDown(() => nodo.removeListener(escuchar));
+      // Teclado cerrado con "atrás": el campo sigue con foco. Se toca otra vez.
+      tester.testTextInput.hide();
+      await tester.pump(const Duration(seconds: 1)); // que no cuente como doble toque
+      await tester.tap(campo(1));
+      await tester.pump();
+      await tester.pump();
+      expect(nodo.hasFocus, isTrue);
+      return cambios;
+    }
+
+    testWidgets('en el navegador del teléfono, tocarlo otra vez reabre el teclado', (
+      tester,
+    ) async {
+      expect(await cambiosDeFocoAlRetocar(tester, movil: true), [false, true]);
+      expect(tester.testTextInput.isVisible, isTrue);
+    });
+
+    testWidgets('en la computadora no se toca el foco', (tester) async {
+      expect(await cambiosDeFocoAlRetocar(tester, movil: false), isEmpty);
+    });
   });
 
   testWidgets('crear cuenta: valida y entra al juego', (tester) async {

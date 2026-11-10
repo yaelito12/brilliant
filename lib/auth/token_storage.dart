@@ -6,7 +6,7 @@ abstract class TokenStorage {
   Future<void> borrar();
 }
 
-/// Para pruebas.
+/// Solo en memoria: para pruebas, y como respaldo cuando no hay almacén seguro.
 class MemoryTokenStorage implements TokenStorage {
   String? _token;
 

@@ -41,6 +41,19 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <!--
+    Sin caché: borra service workers y cachés de versiones anteriores del juego
+    para que al recargar siempre se cargue la versión que está sirviendo la PC.
+  -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations()
+        .then(function (rs) { rs.forEach(function (r) { r.unregister(); }); });
+    }
+    if (window.caches) {
+      caches.keys().then(function (ks) { ks.forEach(function (k) { caches.delete(k); }); });
+    }
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../fondo.dart';
+import '../teclado_web.dart';
 
 const colorTextoAuth = Color(0xFF1B3B4D);
 
@@ -149,12 +150,23 @@ class CampoPassword extends StatefulWidget {
 
 class _CampoPasswordState extends State<CampoPassword> {
   bool _oculta = true;
+  final _foco = FocusNode();
+
+  @override
+  void dispose() {
+    _foco.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return TextFormField(
       controller: widget.controller,
-      enabled: widget.habilitado,
+      focusNode: _foco,
+      onTap: () => reabrirTecladoAlTocar(_foco),
+      // readOnly y no enabled: deshabilitar un campo con foco y volver a
+      // habilitarlo deja sin teclado al navegador de Android (Flutter web).
+      readOnly: !widget.habilitado,
       obscureText: _oculta,
       enableSuggestions: false,
       autocorrect: false,

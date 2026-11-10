@@ -11,6 +11,7 @@ import '../auth/auth_models.dart'
     show mensajeSesionReemplazada, mensajeSesionVencida;
 import '../auth/auth_repository.dart';
 import '../menu_mapas.dart';
+import '../teclado_web.dart';
 import 'conexion_multijugador.dart';
 import 'lobby_bloc.dart';
 import 'modelos.dart';
@@ -79,10 +80,12 @@ class _VistaLobby extends StatefulWidget {
 class _VistaLobbyState extends State<_VistaLobby> {
   late int? _nivel = widget.nivelInicial?.numero;
   final _codigo = TextEditingController();
+  final _focoCodigo = FocusNode();
 
   @override
   void dispose() {
     _codigo.dispose();
+    _focoCodigo.dispose();
     super.dispose();
   }
 
@@ -205,11 +208,10 @@ class _VistaLobbyState extends State<_VistaLobby> {
     final listo = state.conectado && !state.esperando;
     final bloc = context.read<LobbyBloc>();
 
-    // Para unirse basta el código: sin mapa elegido se juega el de quien
-    // creó la sala (se puede cambiar dentro).
+    // Para unirse basta el código: se juega el mapa de quien creó la sala.
     void unirse() {
       if (!listo || _codigo.text.trim().length != 6) return;
-      bloc.add(LobbyUnirse(_codigo.text, _nivel));
+      bloc.add(LobbyUnirse(_codigo.text));
     }
 
     return Column(
@@ -232,6 +234,8 @@ class _VistaLobbyState extends State<_VistaLobby> {
                 child: TextField(
                   key: const Key('codigo'),
                   controller: _codigo,
+                  focusNode: _focoCodigo,
+                  onTap: () => reabrirTecladoAlTocar(_focoCodigo),
                   textAlign: TextAlign.center,
                   textCapitalization: TextCapitalization.characters,
                   maxLength: 6,
@@ -285,7 +289,13 @@ class _VistaLobbyState extends State<_VistaLobby> {
           ],
         ),
         const SizedBox(height: 16),
-        const _Titulo('Elige tu mapa'),
+        const _Titulo('Elige el mapa'),
+        const SizedBox(height: 4),
+        Text(
+          'Todos los de la sala jugarán este mapa.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+        ),
         const SizedBox(height: 12),
         SelectorMapa(
           elegido: _nivel,
@@ -441,6 +451,7 @@ class _EnSala extends StatelessWidget {
     final yo = state.miJugador;
     final bloc = context.read<LobbyBloc>();
     final faltanJugadores = sala.jugadores.length < sala.minJugadores;
+    final soyAnfitrion = yo != null && sala.anfitrion?.id == yo.id;
 
     final String estadoTexto;
     if (faltanJugadores) {
@@ -476,7 +487,11 @@ class _EnSala extends StatelessWidget {
           child: Column(
             children: [
               for (final j in sala.jugadores)
-                _FilaJugador(jugador: j, soyYo: j.id == state.yo?.id),
+                _FilaJugador(
+                  jugador: j,
+                  soyYo: j.id == state.yo?.id,
+                  anfitrion: j.id == sala.anfitrion?.id,
+                ),
             ],
           ),
         ),
@@ -487,20 +502,29 @@ class _EnSala extends StatelessWidget {
           style: TextStyle(color: Colors.grey.shade800),
         ),
         const SizedBox(height: 20),
-        const _Titulo('Tu mapa'),
-        const SizedBox(height: 4),
-        Text(
-          'Cada jugador juega su propio mapa. Cambiarlo quita tu "listo".',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-        ),
-        const SizedBox(height: 10),
-        SelectorMapa(
-          elegido: yo?.nivel,
-          onElegir: state.conectado
-              ? (n) => bloc.add(LobbyElegirMapa(n))
-              : null,
-        ),
+        if (soyAnfitrion) ...[
+          const _Titulo('Mapa de la sala'),
+          const SizedBox(height: 4),
+          Text(
+            'Todos juegan este mapa. Si lo cambias, todos tienen que volver a dar "listo".',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+          ),
+          const SizedBox(height: 10),
+          SelectorMapa(
+            elegido: sala.nivel,
+            onElegir: state.conectado
+                ? (n) => bloc.add(LobbyElegirMapa(n))
+                : null,
+          ),
+        ] else if (sala.nivel != null)
+          // Quien se unió no elige: solo ve qué mapa se va a jugar.
+          Text(
+            'Mapa: ${nivelPorNumero(sala.nivel!)?.nombre ?? 'Nivel ${sala.nivel}'}',
+            key: const Key('mapa-sala'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
         const SizedBox(height: 24),
         Center(
           child: SizedBox(
@@ -602,7 +626,12 @@ class _TarjetaCodigo extends StatelessWidget {
 class _FilaJugador extends StatelessWidget {
   final JugadorEnSala jugador;
   final bool soyYo;
-  const _FilaJugador({required this.jugador, required this.soyYo});
+  final bool anfitrion;
+  const _FilaJugador({
+    required this.jugador,
+    required this.soyYo,
+    required this.anfitrion,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -618,12 +647,17 @@ class _FilaJugador extends StatelessWidget {
         soyYo ? '${j.nametag} (tú)' : j.nametag,
         style: TextStyle(fontWeight: soyYo ? FontWeight.bold : FontWeight.w500),
       ),
-      subtitle: Text(
-        j.conectado
-            ? 'Nivel ${j.nivel}'
-            : 'Nivel ${j.nivel} · sin conexión, esperando que vuelva…',
-        style: TextStyle(color: j.conectado ? null : Colors.orange.shade800),
-      ),
+      subtitle: j.conectado && !anfitrion
+          ? null
+          : Text(
+              [
+                if (anfitrion) 'Anfitrión',
+                if (!j.conectado) 'sin conexión, esperando que vuelva…',
+              ].join(' · '),
+              style: TextStyle(
+                color: j.conectado ? null : Colors.orange.shade800,
+              ),
+            ),
       trailing: j.listo
           ? Chip(
               avatar: Icon(
