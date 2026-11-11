@@ -39,6 +39,10 @@ class PartidaMultijugadorView extends StatefulWidget {
 
 class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
   Coordenada? _ancla;
+
+  /// Dado tocado como ancla (sin casilla elegida aún): se contornean suave
+  /// las casillas donde podría terminar el otro número.
+  int? _valorElegido;
   final Map<Coordenada, int> _iniciales = {};
 
   /// Casilla inicial que el jugador tocó (null = ninguna).
@@ -52,8 +56,10 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
     super.didUpdateWidget(viejo);
     final antes = viejo.state.partida;
     // Ronda nueva (dados nuevos): el ancla de la ronda anterior ya no sirve.
-    if (antes?.ronda != _partida.ronda || antes?.fase != _partida.fase)
+    if (antes?.ronda != _partida.ronda || antes?.fase != _partida.fase) {
       _ancla = null;
+      _valorElegido = null;
+    }
   }
 
   /// Puedo tocar mi tablero ahora mismo.
@@ -100,6 +106,7 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
       anclas: jugadas.anclas,
       ancla: _ancla,
       destinos: jugadas.destinos,
+      destinosTentativos: jugadas.tentativos,
       lugares: viendo.lugares,
       onTap: _puedoJugar ? (c) => _tocar(context, c, viendo, tablero) : null,
     );
@@ -158,13 +165,15 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
     );
   }
 
-  ({Set<Coordenada> anclas, Set<Coordenada> destinos}) _jugadasPosibles(
-    Tablero tablero,
-    Map<Coordenada, int> celdas,
-  ) {
+  ({
+    Set<Coordenada> anclas,
+    Set<Coordenada> destinos,
+    Set<Coordenada> tentativos,
+  })
+  _jugadasPosibles(Tablero tablero, Map<Coordenada, int> celdas) {
     final dados = _partida.dados;
     if (!_puedoJugar || !_partida.jugando || dados == null) {
-      return (anclas: const {}, destinos: const {});
+      return (anclas: const {}, destinos: const {}, tentativos: const {});
     }
     final anclas = anclasPosibles(tablero, celdas, dados);
     final ancla = _ancla;
@@ -176,7 +185,17 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
             ancla,
             otroDado(dados, celdas[ancla]!),
           );
-    return (anclas: anclas, destinos: destinos);
+    // Dado tocado pero sin casilla ancla: dónde podría terminar el otro
+    // número si el ancla fuera cualquier casilla con ese valor.
+    final valor = _valorElegido;
+    final tentativos = ancla != null || valor == null || !dados.contains(valor)
+        ? const <Coordenada>{}
+        : {
+            for (final a in anclas)
+              if (celdas[a] == valor)
+                ...destinosPosibles(tablero, celdas, a, otroDado(dados, valor)),
+          };
+    return (anclas: anclas, destinos: destinos, tentativos: tentativos);
   }
 
   void _tocar(
@@ -194,10 +213,34 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
     final jugadas = _jugadasPosibles(tablero, yo.celdas);
     if (jugadas.destinos.contains(c)) {
       context.read<LobbyBloc>().add(LobbyJugada(_ancla!, c));
-      setState(() => _ancla = null);
+      setState(() {
+        _ancla = null;
+        _valorElegido = null;
+      });
     } else if (jugadas.anclas.contains(c)) {
-      setState(() => _ancla = _ancla == c ? null : c);
+      setState(() {
+        if (_ancla == c) {
+          // Al deseleccionar vuelven los contornos suaves de ese valor
+          _ancla = null;
+          _valorElegido = yo.celdas[c];
+        } else {
+          _ancla = c;
+        }
+      });
     }
+  }
+
+  /// Tocar un dado lo elige (o lo suelta) como ancla tentativa: el tablero
+  /// contornea suave dónde podría terminar el otro número.
+  void _elegirDado(int valor) {
+    setState(() {
+      if (_valorElegido == valor && _ancla == null) {
+        _valorElegido = null;
+      } else {
+        _valorElegido = valor;
+        _ancla = null;
+      }
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -360,8 +403,10 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
       mensaje =
           'No hay jugadas posibles con ${dados![0]} y ${dados[1]}. Pasa la ronda.';
     } else if (_ancla == null) {
-      mensaje =
-          'Toca un ${dados![0]} o un ${dados[1]} de tu tablero como ancla.';
+      final v = _valorElegido;
+      mensaje = v != null && dados!.contains(v)
+          ? 'Toca un $v de tu tablero como ancla para poner el ${otroDado(dados, v)}.'
+          : 'Toca un ${dados![0]} o un ${dados[1]} de tu tablero como ancla.';
     } else {
       mensaje =
           'Coloca el ${otroDado(dados!, viendo.celdas[_ancla]!)} en una casilla marcada.';
@@ -409,10 +454,15 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
               DadosRonda(
                 dados: dados,
                 ronda: p.ronda,
-                valorAncla: esMio && _ancla != null
+                valorAncla: !esMio
+                    ? null
+                    : _ancla != null
                     ? viendo.celdas[_ancla]
-                    : null,
+                    : _valorElegido,
                 apagados: esMio && _puedoJugar && anclas.isEmpty,
+                onElegir: esMio && _puedoJugar && !(yo?.yaJugo ?? true)
+                    ? _elegirDado
+                    : null,
               ),
             ],
             const SizedBox(height: 10),
@@ -562,6 +612,9 @@ class TableroMultijugador extends StatefulWidget {
   final Set<Coordenada> anclas;
   final Coordenada? ancla;
   final Set<Coordenada> destinos;
+
+  /// Opciones de colocación al tocar un dado (sin casilla ancla aún).
+  final Set<Coordenada> destinosTentativos;
   final void Function(Coordenada c)? onTap;
 
   /// Lugar con el que se llenó cada zona (para tachar esos puntos).
@@ -579,6 +632,7 @@ class TableroMultijugador extends StatefulWidget {
     this.anclas = const {},
     this.ancla,
     this.destinos = const {},
+    this.destinosTentativos = const {},
     this.onTap,
     this.lugares = const {},
   });
@@ -731,6 +785,7 @@ class _TableroMultijugadorState extends State<TableroMultijugador>
             esAnclaPosible: w.anclas.contains(c),
             esAncla: w.ancla == c,
             esDestino: w.destinos.contains(c),
+            esDestinoTentativo: w.destinosTentativos.contains(c),
             pulso: _pulso.value,
             claveValor: 'c${c.fila}-${c.columna}',
           ),
@@ -755,6 +810,10 @@ class CeldaTablero extends StatelessWidget {
   final bool esAncla;
   final bool esDestino;
 
+  /// Con un dado elegido (sin casilla ancla aún): aquí podría terminar el
+  /// número a colocar. Lleva un contorno suave.
+  final bool esDestinoTentativo;
+
   /// 0..1: fase del latido (para destinos y la casilla elegida).
   final double pulso;
 
@@ -773,6 +832,7 @@ class CeldaTablero extends StatelessWidget {
     required this.esAnclaPosible,
     required this.esAncla,
     required this.esDestino,
+    this.esDestinoTentativo = false,
     required this.pulso,
     required this.claveValor,
   });
@@ -797,11 +857,19 @@ class CeldaTablero extends StatelessWidget {
         3.5,
       );
     } else if (esDestino) {
-      (borde, grosor) = (colorTextoTablero, 2.5 + 2 * latido);
+      // Contorno discreto: late apenas para llamar la atención sin tapar
+      // la casilla (en teléfonos las casillas son chicas).
+      (borde, grosor) = (
+        colorTextoTablero.withValues(alpha: 0.85),
+        2 + latido,
+      );
     } else if (esAncla) {
       (borde, grosor) = (Colors.white, 4);
     } else if (esAnclaPosible) {
       (borde, grosor) = (colorTextoTablero.withValues(alpha: 0.75), 2);
+    } else if (esDestinoTentativo) {
+      // Opción de colocación al tocar un dado (aún sin casilla ancla)
+      (borde, grosor) = (colorTextoTablero.withValues(alpha: 0.4), 2);
     } else {
       (borde, grosor) = (Colors.white.withValues(alpha: 0.45), 1.5);
     }
@@ -837,11 +905,9 @@ class CeldaTablero extends StatelessWidget {
               blurRadius: 8,
               spreadRadius: 2,
             ),
-          if (seleccionada || esDestino)
+          if (seleccionada)
             BoxShadow(
-              color: (seleccionada ? Colors.orange : Colors.white).withValues(
-                alpha: 0.35 + 0.35 * latido,
-              ),
+              color: Colors.orange.withValues(alpha: 0.35 + 0.35 * latido),
               blurRadius: 6 + 6 * latido,
             ),
         ],
@@ -872,8 +938,10 @@ class CeldaTablero extends StatelessWidget {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(5),
                   border: Border.all(
-                    color: esDestino ? Colors.white : colorTextoTablero,
-                    width: 1.5,
+                    color: esDestino
+                        ? Colors.white.withValues(alpha: 0.85)
+                        : colorTextoTablero,
+                    width: esDestino ? 1 : 1.5,
                   ),
                 ),
               ),
@@ -967,6 +1035,7 @@ class CeldaTablero extends StatelessWidget {
 
 /// Los 2 dados de la ronda. Caen rodando cada vez que empieza una ronda.
 /// Con un ancla elegida, su dado se marca y abajo dice qué número se coloca.
+/// Si [onElegir] no es null, se pueden tocar para elegir el dado ancla.
 class DadosRonda extends StatelessWidget {
   final List<int> dados;
   final int ronda;
@@ -975,12 +1044,16 @@ class DadosRonda extends StatelessWidget {
   /// No hay jugada posible con estos dados.
   final bool apagados;
 
+  /// Se llama al tocar un dado (con su valor). Null = no se pueden tocar.
+  final void Function(int valor)? onElegir;
+
   const DadosRonda({
     super.key,
     required this.dados,
     required this.ronda,
     this.valorAncla,
     this.apagados = false,
+    this.onElegir,
   });
 
   @override
@@ -994,27 +1067,37 @@ class DadosRonda extends StatelessWidget {
           children: [
             for (var i = 0; i < 2; i++) ...[
               if (i == 1) const SizedBox(width: 14),
-              DadoAnimado(
-                key: ValueKey('dado-$i'),
-                valor: dados[i],
-                tirada: ronda,
-                retraso: Duration(milliseconds: i * 180), // no caen a la vez
-                animarAlAparecer: true,
-                builder: (cara, rodando) => AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(13),
-                    border: Border.all(
-                      color: i == anclaEn && !rodando
-                          ? Colors.orange.shade700
-                          : Colors.transparent,
-                      width: 3,
+              // Siempre la misma estructura (aunque no se pueda tocar): si
+              // cambiara, Flutter recrearía el dado y perdería la caída.
+              MouseRegion(
+                cursor: onElegir != null
+                    ? SystemMouseCursors.click
+                    : MouseCursor.defer,
+                child: GestureDetector(
+                  onTap: onElegir == null ? null : () => onElegir!(dados[i]),
+                  child: DadoAnimado(
+                    key: ValueKey('dado-$i'),
+                    valor: dados[i],
+                    tirada: ronda,
+                    retraso: Duration(milliseconds: i * 180), // no caen a la vez
+                    animarAlAparecer: true,
+                    builder: (cara, rodando) => AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(13),
+                        border: Border.all(
+                          color: i == anclaEn && !rodando
+                              ? Colors.orange.shade700
+                              : Colors.transparent,
+                          width: 3,
+                        ),
+                      ),
+                      child: Opacity(
+                        opacity: apagados && !rodando ? 0.4 : 1,
+                        child: Dado(valor: cara),
+                      ),
                     ),
-                  ),
-                  child: Opacity(
-                    opacity: apagados && !rodando ? 0.4 : 1,
-                    child: Dado(valor: cara),
                   ),
                 ),
               ),

@@ -91,15 +91,28 @@ void main() {
     await cerrar(tester);
   });
 
-  testWidgets('si no soy el anfitrión solo veo qué mapa se juega', (tester) async {
-    await abrirLobby(tester, sala: salaJson(jugadores: [
+  testWidgets('si no soy el anfitrión veo solo el mapa elegido, y cambia con él', (tester) async {
+    final ws = await abrirLobby(tester, sala: salaJson(jugadores: [
       jugadorJson('u2', 'Beto', nivel: 3),
       jugadorJson('u1', 'Ana', nivel: 3),
     ]));
     expect(find.text('Anfitrión'), findsOneWidget);
     expect(find.byType(SelectorMapa), findsNothing, reason: 'no hay mapas para elegir');
-    expect(find.text('Mapa de la sala'), findsNothing);
-    expect(find.text('Mapa: Nivel 3'), findsOneWidget);
+    // Solo la miniatura del mapa que eligió el anfitrión, no todos.
+    expect(find.byType(MiniMapa), findsOneWidget);
+    final mapa = find.byKey(const Key('mapa-sala'));
+    expect(tester.widget<Text>(mapa).data, 'Nivel 3');
+
+    // El anfitrión cambia el mapa: la miniatura cambia con él.
+    await servidorDice(tester, ws, {
+      'tipo': 'sala',
+      'sala': salaJson(jugadores: [
+        jugadorJson('u2', 'Beto', nivel: 2),
+        jugadorJson('u1', 'Ana', nivel: 2),
+      ]),
+    });
+    expect(tester.widget<Text>(mapa).data, 'Nivel 2');
+    expect(find.byType(MiniMapa), findsOneWidget);
     await cerrar(tester);
   });
 

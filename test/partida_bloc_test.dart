@@ -92,6 +92,60 @@ void main() {
         expect(bloc.state.numeroAColocar, 3);
       });
 
+      test('elegir el dado contornea los destinos tentativos de sus anclas',
+          () async {
+        iniciar([1, 3]);
+        bloc.add(DadosLanzados());
+        await _esperar();
+        // Sin dado elegido no hay nada que contornear
+        expect(bloc.state.destinosTentativos, isEmpty);
+
+        bloc.add(ValorAnclaElegido(1));
+        await _esperar();
+
+        // La única ancla con 1 es (0,2); el 3 cabe en (0,1) y (0,3)
+        expect(bloc.state.destinosTentativos,
+            {const Coordenada(0, 1), const Coordenada(0, 3)});
+      });
+
+      test('al tocar la casilla ancla quedan solo los destinos reales',
+          () async {
+        iniciar([1, 3]);
+        bloc.add(DadosLanzados());
+        bloc.add(ValorAnclaElegido(1));
+        bloc.add(AnclaSeleccionada(const Coordenada(0, 2)));
+        await _esperar();
+
+        expect(bloc.state.destinosTentativos, isEmpty);
+        expect(bloc.state.destinosPosibles,
+            {const Coordenada(0, 1), const Coordenada(0, 3)});
+      });
+
+      test('deseleccionar la casilla ancla vuelve a los tentativos', () async {
+        iniciar([1, 3]);
+        bloc.add(DadosLanzados());
+        bloc.add(ValorAnclaElegido(1));
+        bloc.add(AnclaSeleccionada(const Coordenada(0, 2)));
+        bloc.add(AnclaSeleccionada(const Coordenada(0, 2)));
+        await _esperar();
+
+        expect(bloc.state.destinosTentativos,
+            {const Coordenada(0, 1), const Coordenada(0, 3)});
+      });
+
+      test('con dados dobles los tentativos se calculan solos', () async {
+        iniciar([4, 4]);
+        bloc.add(DadosLanzados());
+        await _esperar();
+
+        final esperados = {
+          for (final ancla in bloc.state.anclasPosibles)
+            ...destinosPosibles(
+                bloc.state.tablero!, bloc.state.celdas, ancla, 4),
+        };
+        expect(bloc.state.destinosTentativos, esperados);
+      });
+
       test('con un dado elegido, tocar el número del otro dado cambia a ese dado',
           () async {
         iniciar([1, 3]);

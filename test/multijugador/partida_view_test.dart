@@ -209,6 +209,38 @@ void main() {
       expect(find.text('Ancla: 1 · colocas el 3'), findsOneWidget);
       await cerrar(tester);
     });
+
+    testWidgets('tocar un dado contornea suave las opciones de colocación', (tester) async {
+      await enPartida(tester, partidaJson(dados: [1, 3]));
+      await tester.pump(const Duration(seconds: 2)); // que terminen de caer
+      CeldaTablero celdaDe(int f, int c) => tester.widget<CeldaTablero>(
+          find.descendant(of: celda(f, c), matching: find.byType(CeldaTablero)));
+      expect(celdaDe(0, 1).esDestinoTentativo, isFalse, reason: 'sin dado elegido no hay opciones');
+
+      await tester.tap(find.byKey(const ValueKey('dado-0'))); // el 1
+      await avanzar(tester);
+      expect(mensaje(tester), 'Toca un 1 de tu tablero como ancla para poner el 3.');
+      expect(find.text('Ancla: 1 · colocas el 3'), findsOneWidget);
+      // Junto al 1 de (0,2) el 3 cabe en (0,1) y (0,3).
+      expect(celdaDe(0, 1).esDestinoTentativo, isTrue);
+      expect(celdaDe(0, 3).esDestinoTentativo, isTrue);
+      expect(celdaDe(0, 1).esDestino, isFalse, reason: 'aún no hay casilla ancla');
+
+      // Con la casilla ancla elegida quedan solo los destinos reales.
+      await tester.tap(celda(0, 2));
+      await avanzar(tester);
+      expect(celdaDe(0, 1).esDestino, isTrue);
+      expect(celdaDe(0, 1).esDestinoTentativo, isFalse);
+
+      // Tocar el mismo dado otra vez lo suelta.
+      await tester.tap(find.byKey(const ValueKey('dado-0')));
+      await avanzar(tester);
+      await tester.tap(find.byKey(const ValueKey('dado-0')));
+      await avanzar(tester);
+      expect(celdaDe(0, 1).esDestinoTentativo, isFalse);
+      expect(mensaje(tester), 'Toca un 1 o un 3 de tu tablero como ancla.');
+      await cerrar(tester);
+    });
   });
 
   group('rondas', () {

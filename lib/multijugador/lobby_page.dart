@@ -517,14 +517,19 @@ class _EnSala extends StatelessWidget {
                 ? (n) => bloc.add(LobbyElegirMapa(n))
                 : null,
           ),
-        ] else if (sala.nivel != null)
-          // Quien se unió no elige: solo ve qué mapa se va a jugar.
+        ] else if (sala.nivel != null) ...[
+          // Quien se unió no elige: ve solo el mapa que puso el anfitrión,
+          // y se actualiza en cuanto el anfitrión lo cambia.
+          const _Titulo('Mapa de la sala'),
+          const SizedBox(height: 4),
           Text(
-            'Mapa: ${nivelPorNumero(sala.nivel!)?.nombre ?? 'Nivel ${sala.nivel}'}',
-            key: const Key('mapa-sala'),
+            'El anfitrión elige el mapa; todos jugarán este.',
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
           ),
+          const SizedBox(height: 10),
+          Center(child: _MapaDeSala(numero: sala.nivel!)),
+        ],
         const SizedBox(height: 24),
         Center(
           child: SizedBox(
@@ -561,6 +566,56 @@ class _EnSala extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Tarjeta con el mapa elegido por el anfitrión: solo ese, en miniatura.
+/// Cuando el anfitrión cambia de mapa, la miniatura cambia con él.
+class _MapaDeSala extends StatelessWidget {
+  final int numero;
+  const _MapaDeSala({required this.numero});
+
+  @override
+  Widget build(BuildContext context) {
+    final nivel = nivelPorNumero(numero);
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      child: Container(
+        // La clave cambia con el mapa: así la tarjeta hace la transición
+        key: ValueKey('mapa-sala-$numero'),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.teal.shade700, width: 3),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (nivel != null) ...[
+              MiniMapa(nivel: nivel, lado: 18),
+              const SizedBox(height: 8),
+            ],
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.check_circle, size: 18, color: Colors.teal.shade700),
+                const SizedBox(width: 4),
+                Text(
+                  nivel?.nombre ?? 'Nivel $numero',
+                  key: const Key('mapa-sala'),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                    color: _colorTexto,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

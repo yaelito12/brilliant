@@ -48,6 +48,24 @@ class PartidaBloc extends Bloc<PartidaEvent, PartidaState> {
     emit(_tirarDados(state));
   }
 
+  /// Casillas donde podría terminar el otro número si el ancla fuera
+  /// cualquier casilla de [anclas] con [valor]: se contornean suave en el
+  /// tablero para ver las opciones antes de elegir la casilla ancla.
+  Set<Coordenada> _destinosDesdeValor(
+    Tablero tablero,
+    Map<Coordenada, int> celdas,
+    Set<Coordenada> anclas,
+    List<int> dados,
+    int valor,
+  ) {
+    final numero = otroDado(dados, valor);
+    return {
+      for (final ancla in anclas)
+        if (celdas[ancla] == valor)
+          ...destinosPosibles(tablero, celdas, ancla, numero),
+    };
+  }
+
   /// Tira los 2 dados sobre [base] y calcula las anclas posibles.
   /// Si sale doble no hace falta elegir: el ancla y el otro número son iguales.
   PartidaState _tirarDados(PartidaState base) {
@@ -61,6 +79,10 @@ class PartidaBloc extends Bloc<PartidaEvent, PartidaState> {
       anclasPosibles: anclas,
       valorAncla: () => esDoble ? dados[0] : null,
       numeroAColocar: () => esDoble ? dados[0] : null,
+      destinosTentativos: esDoble
+          ? _destinosDesdeValor(
+              base.tablero!, base.celdas, anclas, dados, dados[0])
+          : const {},
       mensaje: anclas.isEmpty
           ? '$prefijo No hay jugadas posibles, pulsa Siguiente.'
           : esDoble
@@ -83,6 +105,8 @@ class PartidaBloc extends Bloc<PartidaEvent, PartidaState> {
       numeroAColocar: () => numero,
       ancla: () => null,
       destinosPosibles: const {},
+      destinosTentativos: _destinosDesdeValor(
+          state.tablero!, state.celdas, state.anclasPosibles, dados, event.valor),
       mensaje: hayAnclas
           ? 'Toca un ${event.valor} del tablero como ancla para poner el $numero.'
           : 'Ningún ${event.valor} tiene espacio para el $numero. Elige el otro dado o pulsa Siguiente.',
@@ -103,9 +127,12 @@ class PartidaBloc extends Bloc<PartidaEvent, PartidaState> {
     }
 
     if (state.ancla == event.coordenada) {
+      // Al deseleccionar vuelven los contornos suaves de todas las opciones
       emit(state.copyWith(
         ancla: () => null,
         destinosPosibles: const {},
+        destinosTentativos: _destinosDesdeValor(state.tablero!, state.celdas,
+            state.anclasPosibles, dados, state.valorAncla!),
         mensaje: 'Toca un ${state.valorAncla} del tablero como ancla.',
       ));
       return;
@@ -118,6 +145,8 @@ class PartidaBloc extends Bloc<PartidaEvent, PartidaState> {
       ancla: () => event.coordenada,
       destinosPosibles:
           destinosPosibles(state.tablero!, state.celdas, event.coordenada, numero),
+      // Con la casilla ancla elegida solo se marcan sus destinos reales
+      destinosTentativos: const {},
       mensaje: 'Coloca el $numero en una casilla marcada.',
     ));
   }
@@ -137,6 +166,7 @@ class PartidaBloc extends Bloc<PartidaEvent, PartidaState> {
       anclasPosibles: const {},
       ancla: () => null,
       destinosPosibles: const {},
+      destinosTentativos: const {},
       puntosUltimaJugada: puntosGanados,
       mensaje: '¡Tablero completo! Puntuación final: ${tablero.puntuacion}.',
     );

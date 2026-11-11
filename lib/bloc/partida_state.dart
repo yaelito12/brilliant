@@ -39,6 +39,11 @@ class PartidaState {
   /// Casillas vacías vecinas del ancla donde la zona acepta [numeroAColocar].
   final Set<Coordenada> destinosPosibles;
 
+  /// Casillas donde podría terminar [numeroAColocar] si el ancla fuera
+  /// cualquier casilla con [valorAncla]. Se calculan al elegir el dado
+  /// (antes de tocar la casilla ancla) y se contornean suave en el tablero.
+  final Set<Coordenada> destinosTentativos;
+
   /// true si ya se colocó un número en este turno.
   final bool numeroColocado;
 
@@ -61,6 +66,7 @@ class PartidaState {
     this.ancla,
     this.numeroAColocar,
     this.destinosPosibles = const {},
+    this.destinosTentativos = const {},
     this.numeroColocado = false,
     this.ultimaColocada,
     this.puntosUltimaJugada = 0,
@@ -83,6 +89,7 @@ class PartidaState {
     Coordenada? Function()? ancla,
     int? Function()? numeroAColocar,
     Set<Coordenada>? destinosPosibles,
+    Set<Coordenada>? destinosTentativos,
     bool? numeroColocado,
     Coordenada? Function()? ultimaColocada,
     int? puntosUltimaJugada,
@@ -100,6 +107,7 @@ class PartidaState {
       ancla: ancla != null ? ancla() : this.ancla,
       numeroAColocar: numeroAColocar != null ? numeroAColocar() : this.numeroAColocar,
       destinosPosibles: destinosPosibles ?? this.destinosPosibles,
+      destinosTentativos: destinosTentativos ?? this.destinosTentativos,
       numeroColocado: numeroColocado ?? this.numeroColocado,
       ultimaColocada: ultimaColocada != null ? ultimaColocada() : this.ultimaColocada,
       puntosUltimaJugada: puntosUltimaJugada ?? this.puntosUltimaJugada,

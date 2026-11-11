@@ -938,6 +938,10 @@ class _TableroViewState extends State<_TableroView> {
 
     final esAnclaSeleccionada = partida.ancla == coordenada;
     final esDestino = partida.destinosPosibles.contains(coordenada);
+    // Al elegir un dado (sin casilla ancla todavía): dónde podría terminar
+    // el número a colocar, con un contorno más suave que el destino real.
+    final esDestinoTentativo =
+        !esDestino && partida.destinosTentativos.contains(coordenada);
     final colorBase = colorDeTipo(zona.tipo);
 
     final BoxBorder borde;
@@ -948,12 +952,19 @@ class _TableroViewState extends State<_TableroView> {
     var bordeUniforme = true;
     if (esDestino) {
       // Donde se puede poner el número: oscuro por fuera, blanco por dentro
-      borde = Border.all(color: _colorTexto, width: 4);
+      borde = Border.all(color: _colorTexto, width: 3);
       anillo = Colors.white;
     } else if (esAnclaSeleccionada) {
       // Ancla elegida: al revés, blanco por fuera, oscuro por dentro
-      borde = Border.all(color: Colors.white, width: 4);
+      borde = Border.all(color: Colors.white, width: 3);
       anillo = _colorTexto;
+    } else if (esDestinoTentativo) {
+      // Opción de colocación al elegir el dado: contorno suave (se vuelve
+      // marcado al tocar la casilla ancla)
+      borde = Border.all(
+        color: _colorTexto.withValues(alpha: 0.4),
+        width: 2.5,
+      );
     } else if (esInicial && estaEsperando) {
       // Casillas iniciales mientras se eligen los valores: vacías con el
       // mismo contorno marcado; ya llenas, con un borde oscuro sencillo
@@ -1103,7 +1114,7 @@ class _TableroViewState extends State<_TableroView> {
                 child: Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(2),
-                    border: Border.all(color: anillo, width: 2),
+                    border: Border.all(color: anillo, width: 1.5),
                   ),
                 ),
               ),
