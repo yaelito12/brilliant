@@ -1,9 +1,10 @@
 import 'dart:async';
 
 import 'package:bloc/bloc.dart';
-import 'package:brilliant_reglas/brilliant_reglas.dart' show Coordenada;
+import 'package:brilliant_reglas/brilliant_reglas.dart';
 
 import '../auth/auth_models.dart';
+import '../sonidos.dart' show Sonido;
 import 'conexion_multijugador.dart';
 import 'modelos.dart';
 
@@ -75,12 +76,25 @@ class _ConexionCambio extends LobbyEvent {
 // Estado
 // ---------------------------------------------------------------------------
 
-/// Mensaje para mostrar una sola vez (snackbar). [id] cambia con cada uno.
+/// Qué clase de aviso es: cambia el color y el ícono con que se muestra.
+enum TipoAviso { info, exito, alerta, error }
+
+/// Mensaje para mostrar una sola vez (notificación flotante). [id] cambia
+/// con cada uno.
 class Aviso {
   final int id;
   final String texto;
-  final bool esError;
-  const Aviso(this.id, this.texto, {this.esError = false});
+  final TipoAviso tipo;
+  const Aviso(this.id, this.texto, {this.tipo = TipoAviso.info});
+
+  bool get esError => tipo == TipoAviso.error;
+}
+
+/// Efecto de sonido para tocar una sola vez. [id] cambia con cada uno.
+class EfectoSonido {
+  final int id;
+  final Sonido sonido;
+  const EfectoSonido(this.id, this.sonido);
 }
 
 class LobbyState {
@@ -98,6 +112,9 @@ class LobbyState {
   final bool esperando;
   final Aviso? aviso;
 
+  /// Efecto de sonido pendiente de tocar (una sola vez).
+  final EfectoSonido? sonido;
+
   const LobbyState({
     this.conexion = EstadoConexion.conectando,
     this.yo,
@@ -106,6 +123,7 @@ class LobbyState {
     this.resultados,
     this.esperando = false,
     this.aviso,
+    this.sonido,
   });
 
   bool get conectado => conexion == EstadoConexion.conectado;
@@ -120,6 +138,7 @@ class LobbyState {
     ResultadosPartida? Function()? resultados,
     bool? esperando,
     Aviso? aviso,
+    EfectoSonido? sonido,
   }) => LobbyState(
     conexion: conexion ?? this.conexion,
     yo: yo ?? this.yo,
@@ -128,6 +147,7 @@ class LobbyState {
     resultados: resultados != null ? resultados() : this.resultados,
     esperando: esperando ?? this.esperando,
     aviso: aviso ?? this.aviso,
+    sonido: sonido ?? this.sonido,
   );
 }
 
@@ -142,6 +162,7 @@ class LobbyBloc extends Bloc<LobbyEvent, LobbyState> {
   final ConexionMultijugador conexion;
   final List<StreamSubscription<dynamic>> _subs = [];
   int _avisos = 0;
+  int _sonidos = 0;
 
   LobbyBloc(this.conexion) : super(const LobbyState()) {
     on<LobbyIniciado>(_alIniciar);
@@ -189,11 +210,16 @@ class LobbyBloc extends Bloc<LobbyEvent, LobbyState> {
     conexion.iniciar();
   }
 
-  Aviso _aviso(String texto, {bool error = false}) => Aviso(++_avisos, texto, esError: error);
+  Aviso _aviso(String texto, {TipoAviso tipo = TipoAviso.info}) =>
+      Aviso(++_avisos, texto, tipo: tipo);
+
+  EfectoSonido _sonar(Sonido s) => EfectoSonido(++_sonidos, s);
 
   void _pedir(Emitter<LobbyState> emit, Map<String, Object?> msg, {bool esperar = false}) {
     if (!conexion.enviar(msg)) {
-      emit(state.copyWith(aviso: _aviso('Sin conexión con el servidor. Reintentando…', error: true)));
+      emit(state.copyWith(
+        aviso: _aviso('Sin conexión con el servidor. Reintentando…', tipo: TipoAviso.error),
+      ));
       return;
     }
     if (esperar) emit(state.copyWith(esperando: true));
@@ -237,34 +263,41 @@ class LobbyBloc extends Bloc<LobbyEvent, LobbyState> {
         case 'sala' || 'partida_iniciada':
           final sala = SalaInfo.fromJson(m['sala'] as Map<String, dynamic>);
           final iniciada = m['tipo'] == 'partida_iniciada';
-          final texto = iniciada ? '¡Todos listos! Empieza la partida.' : _textoEvento(m['evento']);
+          final aviso = iniciada
+              ? _aviso('¡Todos listos! Empieza la partida.', tipo: TipoAviso.exito)
+              : _avisoEvento(m['evento']);
           emit(state.copyWith(
             sala: () => sala,
             partida: sala.enLobby ? () => null : null,
             resultados: iniciada ? () => null : null,
             esperando: false,
-            aviso: texto == null ? null : _aviso(texto),
+            aviso: aviso,
           ));
         case 'partida':
           final partida = PartidaInfo.fromJson(m['partida'] as Map<String, dynamic>);
-          final texto = _textoEventoPartida(m['evento'], partida);
+          final (aviso, sonido) = _avisoEventoPartida(m['evento'], partida);
           emit(state.copyWith(
             partida: () => partida,
             esperando: false,
-            aviso: texto == null ? null : _aviso(texto),
+            aviso: aviso,
+            sonido: sonido == null ? null : _sonar(sonido),
           ));
         case 'partida_terminada':
           emit(state.copyWith(
             partida: () => PartidaInfo.fromJson(m['partida'] as Map<String, dynamic>),
             resultados: () => ResultadosPartida.fromJson(m),
             esperando: false,
+            sonido: _sonar(Sonido.victoria),
           ));
         case 'saliste':
           emit(_fueraDeSala());
         case 'error':
           emit(state.copyWith(
             esperando: false,
-            aviso: _aviso(m['message'] as String? ?? 'Error del servidor.', error: true),
+            aviso: _aviso(
+              m['message'] as String? ?? 'Error del servidor.',
+              tipo: TipoAviso.error,
+            ),
           ));
       }
     } on TypeError {
@@ -272,53 +305,130 @@ class LobbyBloc extends Bloc<LobbyEvent, LobbyState> {
     }
   }
 
-  /// Texto para los eventos de la sala de los demás (los propios no se avisan).
-  String? _textoEvento(Object? evento) {
+  /// Aviso para los eventos de la sala de los demás (los propios no se avisan).
+  Aviso? _avisoEvento(Object? evento) {
     if (evento is! Map) return null;
     final quien = evento['nametag'];
     if (quien is! String || quien == state.yo?.nametag) return null;
-    return switch (evento['tipo']) {
-      'unido' => '$quien se unió a la sala.',
-      'salio' => '$quien salió de la sala.',
-      'desconectado' => '$quien perdió la conexión.',
-      'reconectado' => '$quien volvió.',
-      'abandono' => '$quien no volvió y salió de la sala.',
-      _ => null,
+    final gracia = evento['graciaSegundos'];
+    final (texto, tipo) = switch (evento['tipo']) {
+      'unido' => ('$quien se unió a la sala.', TipoAviso.info),
+      'salio' => ('$quien salió de la sala.', TipoAviso.info),
+      'desconectado' => (
+        gracia is int
+            ? '$quien perdió la conexión. Tiene $gracia s para volver…'
+            : '$quien perdió la conexión.',
+        TipoAviso.alerta,
+      ),
+      'reconectado' => ('$quien volvió.', TipoAviso.exito),
+      'abandono' => ('$quien no volvió y salió de la sala.', TipoAviso.alerta),
+      _ => (null, TipoAviso.info),
+    };
+    return texto == null ? null : _aviso(texto, tipo: tipo);
+  }
+
+  /// Nombre del color de la zona [id] en el mapa del nivel [nivel].
+  String _nombreZona(int nivel, String id) {
+    final tipo = nivelPorNumero(nivel)?.construirTablero().zonas[id]?.tipo;
+    return switch (tipo) {
+      TipoVerde() => 'verde',
+      TipoAzul() => 'azul',
+      TipoRojo() => 'roja',
+      TipoAmarillo() => 'amarilla',
+      TipoMorado() => 'morada',
+      TipoGris() => 'gris',
+      TipoNaranja(:final minimo, :final maximo) => 'naranja $minimo-$maximo',
+      _ => id,
     };
   }
 
-  /// Avisos durante la partida: los puntos que gané, si se me acabó el
-  /// tiempo y lo que les pasa a los demás (sin avisar cada jugada ajena,
-  /// que con 6 jugadores serían demasiados).
-  String? _textoEventoPartida(Object? evento, PartidaInfo partida) {
-    if (evento is! Map) return null;
+  String _ordinal(Object? lugar) => lugar is int ? '$lugar.º' : '';
+
+  /// Aviso y sonido durante la partida: zonas que se llenan (propias y
+  /// ajenas, con sus puntos), desconexiones con su cuenta atrás, abandonos
+  /// y rendiciones.
+  (Aviso?, Sonido?) _avisoEventoPartida(Object? evento, PartidaInfo partida) {
+    if (evento is! Map) return (null, null);
     final quien = evento['nametag'];
     final soyYo = quien == state.yo?.nametag;
     switch (evento['tipo']) {
-      case 'jugada' when soyYo:
+      case 'jugada':
         final puntos = evento['puntosGanados'];
-        if (evento['completo'] == true) {
-          return '¡Completaste tu tablero! La partida termina al acabar la ronda.';
+        final zonas = evento['zonas'];
+        final llenoZona = zonas is List && zonas.isNotEmpty;
+
+        String? texto;
+        if (llenoZona) {
+          final nivel = quien is String
+              ? partida.jugadores
+                    .where((j) => j.nametag == quien)
+                    .map((j) => j.nivel)
+                    .firstOrNull
+              : null;
+          final detalle = [
+            for (final z in zonas.whereType<Map>())
+              '${nivel == null ? z['zona'] : _nombreZona(nivel, z['zona'] as String)}'
+                  ' (${_ordinal(z['lugar'])} lugar, +${z['puntos']})',
+          ].join(' y ');
+          texto = soyYo
+              ? '¡Llenaste la zona $detalle! Ganaste $puntos puntos.'
+              : '$quien llenó la zona $detalle y recibió $puntos puntos.';
         }
-        return puntos is int && puntos > 0 ? '¡Zona completada! +$puntos puntos.' : null;
-      case 'jugada' when evento['completo'] == true:
-        return '$quien completó su tablero: esta es la última ronda.';
+        if (evento['completo'] == true) {
+          final fin = soyYo
+              ? '¡Completaste tu tablero! La partida termina al acabar la ronda.'
+              : '$quien completó su tablero: esta es la última ronda.';
+          texto = texto == null ? fin : '$texto $fin';
+        }
+        if (texto == null) return (null, null);
+        return (
+          _aviso(texto, tipo: TipoAviso.exito),
+          llenoZona ? Sonido.zona : null,
+        );
       case 'ronda':
         final pasaron = evento['pasaronPorTiempo'];
         if (pasaron is List && pasaron.contains(state.yo?.nametag)) {
-          return 'Se acabó el tiempo: pasaste la ronda ${partida.ronda - 1}.';
+          return (
+            _aviso(
+              'Se acabó el tiempo: pasaste la ronda ${partida.ronda - 1}.',
+              tipo: TipoAviso.alerta,
+            ),
+            null,
+          );
         }
-        return null;
+        return (null, null);
       case 'desconectado' when !soyYo:
-        return '$quien perdió la conexión. Sus turnos se pasan solos.';
+        final gracia = evento['graciaSegundos'];
+        return (
+          _aviso(
+            gracia is int
+                ? '$quien perdió la conexión: tiene $gracia s para volver '
+                      'o queda fuera. La ronda lo espera.'
+                : '$quien perdió la conexión. La ronda lo espera unos segundos.',
+            tipo: TipoAviso.alerta,
+          ),
+          null,
+        );
       case 'reconectado' when !soyYo:
-        return '$quien volvió.';
+        return (_aviso('$quien volvió. ¡Sigue la partida!', tipo: TipoAviso.exito), null);
       case 'concedio':
-        return soyYo ? 'Te rendiste. Puedes seguir viendo la partida.' : '$quien se rindió.';
+        return (
+          _aviso(
+            soyYo ? 'Te rendiste. Puedes seguir viendo la partida.' : '$quien se rindió.',
+            tipo: TipoAviso.alerta,
+          ),
+          Sonido.abandono,
+        );
       case 'abandono' when !soyYo:
-        return '$quien no volvió: abandonó la partida.';
+        return (
+          _aviso(
+            '$quien no volvió a tiempo: pierde y queda fuera de la partida.',
+            tipo: TipoAviso.alerta,
+          ),
+          Sonido.abandono,
+        );
     }
-    return null;
+    return (null, null);
   }
 
   @override

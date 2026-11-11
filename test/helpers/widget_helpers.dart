@@ -54,15 +54,9 @@ Finder boton(String texto) => find.ancestor(
 bool botonHabilitado(WidgetTester tester, String texto) =>
     tester.widget<ElevatedButton>(boton(texto)).onPressed != null;
 
-/// Toca la casilla [c] del tablero 7x7.
+/// Toca la casilla [c] del tablero 7x7 (cada celda lleva su propia clave).
 Future<void> tocarCelda(WidgetTester tester, Coordenada c) async {
-  final grid = tester.getRect(tablero());
-  const espacio = 3.0;
-  final lado = (grid.width - espacio * 6) / 7;
-  await tester.tapAt(Offset(
-    grid.left + c.columna * (lado + espacio) + lado / 2,
-    grid.top + c.fila * (lado + espacio) + lado / 2,
-  ));
+  await tester.tap(find.byKey(Key('celda-${c.fila}-${c.columna}')));
   await tester.pumpAndSettle();
 }
 
@@ -83,18 +77,14 @@ Future<void> asentar(WidgetTester tester) async {
 /// Casillas iniciales del nivel 1 en un orden fijo.
 List<Coordenada> casillasIniciales() => casillasInicialesNivel1.toList();
 
-/// Toca una casilla inicial y elige [numero] en la hoja de abajo.
+/// Toca una casilla inicial y pulsa [numero] en el teclado del panel
+/// (el mismo teclado que usa la partida en línea).
 Future<void> ponerNumeroInicial(
   WidgetTester tester,
   int indice,
   int numero,
 ) async {
-  await tocarCelda(tester, casillasIniciales()[indice]);
-  await tester.tap(find.descendant(
-    of: find.byType(BottomSheet),
-    matching: find.text('$numero'),
-  ));
-  await tester.pumpAndSettle();
+  await ponerNumeroEn(tester, casillasIniciales()[indice], numero);
 }
 
 /// Pone los 6 números iniciales (1 a 6) y pulsa "Comenzar juego".
@@ -179,17 +169,15 @@ class DadosFijos implements Random {
   bool nextBool() => throw UnimplementedError();
 }
 
-/// Toca la casilla inicial [c] y elige [numero] en la hoja de abajo.
+/// Toca la casilla inicial [c] y pulsa [numero] en el teclado del panel.
 Future<void> ponerNumeroEn(
   WidgetTester tester,
   Coordenada c,
   int numero,
 ) async {
   await tocarCelda(tester, c);
-  await tester.tap(find.descendant(
-    of: find.byType(BottomSheet),
-    matching: find.text('$numero'),
-  ));
+  await tester.ensureVisible(find.byKey(Key('tecla-$numero')));
+  await tester.tap(find.byKey(Key('tecla-$numero')));
   await tester.pumpAndSettle();
 }
 

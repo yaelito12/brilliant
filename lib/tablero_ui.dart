@@ -3,7 +3,9 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import 'aviso_sin_salida.dart';
+import 'avisos.dart';
 import 'fondo.dart';
+import 'sonidos.dart';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -18,6 +20,8 @@ import 'bloc/partida_event.dart';
 import 'bloc/partida_state.dart';
 
 /// Pantalla de juego del mapa [nivel] (se elige en el menú de mapas).
+/// Usa la misma interfaz que la partida en línea: el mismo tablero, el mismo
+/// teclado de números iniciales y las mismas notificaciones.
 class TableroPage extends StatelessWidget {
   /// Mapa a jugar; por defecto, el primero de los oficiales.
   final Nivel? nivel;
@@ -54,6 +58,10 @@ class _TableroViewState extends State<_TableroView> {
   /// Mapa de qué número el jugador ha puesto en cada casilla inicial
   final Map<Coordenada, int> _valoresIniciales = {};
 
+  /// Casilla inicial que el jugador tocó (null = ninguna): el próximo
+  /// número del teclado va ahí, como en la partida en línea.
+  Coordenada? _casillaElegida;
+
   @override
   void initState() {
     super.initState();
@@ -64,6 +72,13 @@ class _TableroViewState extends State<_TableroView> {
 
   bool get _todasLasCasillasInicalesLlenas {
     return _casillasIniciales.every((c) => _valoresIniciales.containsKey(c));
+  }
+
+  /// Tablero base con los números iniciales puestos hasta ahora.
+  Tablero _tableroConIniciales() {
+    var t = _tablero;
+    _valoresIniciales.forEach((c, n) => t = t.agregarNumero(c, n));
+    return t;
   }
 
   /// Sale de la partida (o se rinde) y vuelve al menú de mapas. Si hay
@@ -117,9 +132,80 @@ class _TableroViewState extends State<_TableroView> {
       return;
     }
 
-    // Antes de empezar la partida se pueden corregir los valores iniciales
+    // Antes de empezar: tocar una casilla inicial la elige; el número se
+    // pone con el teclado de abajo (o el del equipo), como en línea.
     if (!_casillasIniciales.contains(coordenada)) return;
-    _mostrarSelectorNumero(context, coordenada);
+    setState(() => _casillaElegida = coordenada);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Números iniciales (misma mecánica que en la partida en línea)
+  // ---------------------------------------------------------------------------
+
+  bool _estaEsperando(JuegoState juego, PartidaState partida) =>
+      !partida.iniciada && juego is JuegoEsperandoValores;
+
+  /// Números que se pueden poner en la casilla elegida ahora mismo.
+  Set<int> _permitidos(Coordenada? c) => c == null
+      ? const {}
+      : numerosParaInicial(widget.nivel, _valoresIniciales, c);
+
+  void _ponerNumero(int numero) {
+    final c = _casillaElegida;
+    if (c == null || !_permitidos(c).contains(numero)) return;
+    setState(() {
+      _valoresIniciales[c] = numero;
+      _casillaElegida = null;
+    });
+    if (!_todasLasCasillasInicalesLlenas) {
+      context.read<JuegoBloc>().add(ValoresInicialesIncompletos());
+    }
+  }
+
+  void _borrarNumero() {
+    final c = _casillaElegida;
+    if (c == null || !_valoresIniciales.containsKey(c)) return;
+    setState(() => _valoresIniciales.remove(c));
+    context.read<JuegoBloc>().add(ValoresInicialesIncompletos());
+  }
+
+  /// Rellena las casillas con números válidos al azar.
+  void _alAzar() {
+    final casillas = _casillasIniciales.toList();
+    final random = Random();
+    for (var intento = 0; intento < 2000; intento++) {
+      final numeros = [1, 2, 3, 4, 5, 6]..shuffle(random);
+      final valores = {
+        for (var i = 0; i < casillas.length; i++) casillas[i]: numeros[i % 6],
+      };
+      if (errorEnValoresIniciales(widget.nivel, valores) == null) {
+        setState(() {
+          _valoresIniciales
+            ..clear()
+            ..addAll(valores);
+          _casillaElegida = null;
+        });
+        return;
+      }
+    }
+  }
+
+  /// Teclado físico: 1-6 ponen el número; Retroceso o Supr lo borran.
+  KeyEventResult _alPulsarTecla(KeyEvent e, JuegoState juego, PartidaState partida) {
+    if (!_estaEsperando(juego, partida) || e is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    final n = int.tryParse(e.character ?? '');
+    if (n != null && n >= 1 && n <= 6) {
+      _ponerNumero(n);
+      return KeyEventResult.handled;
+    }
+    if (e.logicalKey == LogicalKeyboardKey.backspace ||
+        e.logicalKey == LogicalKeyboardKey.delete) {
+      _borrarNumero();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   /// Si ya se colocó el número avanza directo; si no, pide confirmación.
@@ -164,203 +250,6 @@ class _TableroViewState extends State<_TableroView> {
     }
   }
 
-  void _mostrarSelectorNumero(BuildContext context, Coordenada coordenada) {
-    final bloc = context.read<JuegoBloc>();
-    final valorActual = _valoresIniciales[coordenada];
-    final ocupadosPorOtros = _valoresIniciales.entries
-        .where((e) => e.key != coordenada)
-        .map((e) => e.value)
-        .toSet();
-
-    // La zona también tiene que aceptar el número (ej. la naranja 4-6)
-    final zona = _tablero.zonaEn(coordenada)!;
-    final otrosEnLaZona = _valoresIniciales.entries
-        .where(
-          (e) => e.key != coordenada && _tablero.zonaEn(e.key)?.id == zona.id,
-        )
-        .map((e) => e.value)
-        .toList();
-    bool fueraDeRegla(int numero) =>
-        !zona.tipo.esPosibleAgregar(otrosEnLaZona, numero);
-    final zonaRestringe = List.generate(6, (i) => i + 1).any(fueraDeRegla);
-    bool bloqueado(int numero) =>
-        ocupadosPorOtros.contains(numero) || fueraDeRegla(numero);
-
-    // Si no cabe ningún número, se explica por qué y se ofrece moverlo aquí.
-    final sinSalida = bloqueoInicial(
-      widget.nivel,
-      _valoresIniciales,
-      coordenada,
-    );
-    void moverAqui(int numero) {
-      Navigator.pop(context);
-      setState(() {
-        _valoresIniciales.remove(sinSalida!.usadoEn[numero]);
-        _valoresIniciales[coordenada] = numero;
-      });
-      bloc.add(ValoresInicialesIncompletos());
-    }
-
-    final focusNode = FocusNode();
-    focusNode.requestFocus();
-
-    void seleccionarNumero(int numero) {
-      // No permitir si está ocupado o la zona no lo acepta
-      if (bloqueado(numero)) return;
-      Navigator.pop(context);
-      setState(() {
-        _valoresIniciales[coordenada] = numero;
-      });
-      if (!_todasLasCasillasInicalesLlenas) {
-        bloc.add(ValoresInicialesIncompletos());
-      }
-    }
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      // Puede crecer y desplazarse: con el aviso de "casilla sin salida" el
-      // contenido no cabe en la altura normal de la hoja.
-      isScrollControlled: true,
-      builder: (_) {
-        return KeyboardListener(
-          focusNode: focusNode,
-          onKeyEvent: (event) {
-            if (event is KeyDownEvent) {
-              final keyLabel = event.logicalKey.keyLabel;
-              if (['1', '2', '3', '4', '5', '6'].contains(keyLabel)) {
-                seleccionarNumero(int.parse(keyLabel));
-              } else if (event.logicalKey.keyLabel == 'Backspace' ||
-                  event.logicalKey.keyLabel == 'Delete') {
-                if (valorActual != null) {
-                  Navigator.pop(context);
-                  setState(() {
-                    _valoresIniciales.remove(coordenada);
-                  });
-                  bloc.add(ValoresInicialesIncompletos());
-                }
-              }
-            }
-          },
-          child: Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Elige un número (1-6) — sin repetir',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Puedes presionar un número en tu teclado',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                  ),
-                  if (zonaRestringe) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Zona ${nombreDeTipo(zona.tipo).toLowerCase()}: '
-                      '${zona.tipo.descripcion.toLowerCase()}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.orange.shade800,
-                      ),
-                    ),
-                  ],
-                  if (sinSalida != null) ...[
-                    const SizedBox(height: 12),
-                    AvisoSinSalida(bloqueo: sinSalida, onMover: moverAqui),
-                  ],
-                  const SizedBox(height: 16),
-                  // En pantallas muy angostas la fila completa se encoge en
-                  // vez de recortar los últimos círculos.
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      spacing: 10,
-                      children: List.generate(6, (i) {
-                      final numero = i + 1;
-                      final estaOcupado = bloqueado(numero);
-                      final esSeleccionado = valorActual == numero;
-
-                      return GestureDetector(
-                        onTap: estaOcupado
-                            ? null
-                            : () => seleccionarNumero(numero),
-                        child: Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: estaOcupado
-                                ? Colors.grey.shade300
-                                : esSeleccionado
-                                ? Colors.orange.shade600
-                                : Colors.teal.shade600,
-                            shape: BoxShape.circle,
-                            border: esSeleccionado
-                                ? Border.all(color: Colors.white, width: 3)
-                                : null,
-                          ),
-                          child: Center(
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                '$numero',
-                                style: TextStyle(
-                                  color: estaOcupado
-                                      ? Colors.grey.shade500
-                                      : Colors.white,
-                                  fontSize: 22,
-                                  height: 1,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                      }),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextButton.icon(
-                    onPressed: valorActual == null
-                        ? null
-                        : () {
-                            Navigator.pop(context);
-                            setState(() {
-                              _valoresIniciales.remove(coordenada);
-                            });
-                            bloc.add(ValoresInicialesIncompletos());
-                          },
-                    icon: Icon(
-                      Icons.delete,
-                      color: valorActual == null ? Colors.grey : Colors.red,
-                    ),
-                    label: Text(
-                      'Borrar número (Supr)',
-                      style: TextStyle(
-                        color: valorActual == null ? Colors.grey : Colors.red,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    ).whenComplete(() => focusNode.dispose());
-  }
-
   @override
   Widget build(BuildContext context) {
     // El "atrás" del sistema pasa por la misma confirmación que Rendirse
@@ -377,16 +266,17 @@ class _TableroViewState extends State<_TableroView> {
                 context.read<PartidaBloc>().add(
                   PartidaIniciada(_tablero, Map.of(_valoresIniciales)),
                 );
-                _mostrarSnack(
+                mostrarNotificacion(
                   context,
-                  Icons.check_circle,
                   '¡Valores iniciales listos! El juego puede comenzar.',
+                  tipo: TipoAviso.exito,
+                  icono: Icons.check_circle,
                 );
               }
             },
           ),
-          // Al colocar un número: aviso si completó una zona o el tablero
-          // (los dados del siguiente turno ya se tiraron solos)
+          // Al colocar un número: aviso y sonido si completó una zona o el
+          // tablero (los dados del siguiente turno ya se tiraron solos)
           BlocListener<PartidaBloc, PartidaState>(
             listenWhen: (anterior, actual) =>
                 actual.ultimaColocada != null &&
@@ -399,19 +289,22 @@ class _TableroViewState extends State<_TableroView> {
                   tablero.zonaEn(state.ultimaColocada!)?.id == completadas.last;
 
               if (state.terminada) {
-                _mostrarSnack(
+                Sonidos.tocar(Sonido.victoria);
+                mostrarNotificacion(
                   context,
-                  Icons.emoji_events,
                   '¡Tablero completo! Puntuación final: ${state.puntuacion}',
+                  tipo: TipoAviso.exito,
+                  icono: Icons.emoji_events,
                 );
               } else if (completoZona) {
+                Sonidos.tocar(Sonido.zona);
                 final id = completadas.last;
                 final color = nombreDeTipo(tablero.zonas[id]!.tipo)
                     .toLowerCase();
-                _mostrarSnack(
+                mostrarNotificacion(
                   context,
-                  Icons.star,
                   '¡Zona $color completada! +${tablero.puntosDe(id)} puntos',
+                  tipo: TipoAviso.exito,
                 );
               }
             },
@@ -422,129 +315,133 @@ class _TableroViewState extends State<_TableroView> {
             return BlocBuilder<PartidaBloc, PartidaState>(
               builder: (context, partida) {
                 return FondoBrilliant(
-                  child: Scaffold(
-                    backgroundColor: Colors.transparent,
-                    appBar: AppBar(
-                      title: const Text(
-                        'Brilliant',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      backgroundColor: Colors.teal.shade700,
-                      foregroundColor: Colors.white,
-                      // Sin flecha de regreso: se sale con Rendirse/Salir
-                      automaticallyImplyLeading: false,
-                      actions: [
-                        // Mapa que se está jugando
-                        const Icon(Icons.map, size: 20),
-                        const SizedBox(width: 6),
-                        Text(
-                          widget.nivel.nombre,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                  child: Focus(
+                    autofocus: true,
+                    onKeyEvent: (_, e) => _alPulsarTecla(e, juego, partida),
+                    child: Scaffold(
+                      backgroundColor: Colors.transparent,
+                      appBar: AppBar(
+                        title: const Text(
+                          'Brilliant',
+                          style: TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        const SizedBox(width: 12),
-                        _buildBotonSalir(context, partida),
-                        const SizedBox(width: 8),
-                      ],
-                    ),
-                    // Los dados y el botón van pegados al tablero para no
-                    // tener que cruzar la pantalla en cada jugada
-                    body: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final tablero = _buildTablero(context, juego, partida);
-                        final leyenda = _LeyendaChips(
-                          tablero: partida.tablero ?? _tablero,
-                        );
-
-                        // Pantalla ancha: panel justo a la derecha del tablero
-                        if (constraints.maxWidth >= 860) {
-                          const anchoPanel = 320.0;
-                          final lado = min(
-                            min(constraints.maxHeight - 32, 640.0),
-                            constraints.maxWidth -
-                                anchoPanel -
-                                64 -
-                                2 * _anchoIndicadores,
+                        backgroundColor: Colors.teal.shade700,
+                        foregroundColor: Colors.white,
+                        // Sin flecha de regreso: se sale con Rendirse/Salir
+                        automaticallyImplyLeading: false,
+                        actions: [
+                          // Mapa que se está jugando
+                          const Icon(Icons.map, size: 20),
+                          const SizedBox(width: 6),
+                          Text(
+                            widget.nivel.nombre,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(width: 12),
+                          _buildBotonSalir(context, partida),
+                          const SizedBox(width: 8),
+                        ],
+                      ),
+                      // Los dados y el botón van pegados al tablero para no
+                      // tener que cruzar la pantalla en cada jugada
+                      body: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final tablero = _buildTablero(context, juego, partida);
+                          final leyenda = _LeyendaChips(
+                            tablero: partida.tablero ?? _tableroConIniciales(),
                           );
-                          return Center(
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(
-                                  width: lado + 2 * _anchoIndicadores,
-                                  height: lado,
-                                  child: tablero,
-                                ),
-                                const SizedBox(width: 16),
-                                SizedBox(
-                                  width: anchoPanel,
-                                  height: lado,
-                                  child: Center(
-                                    child: SingleChildScrollView(
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.stretch,
-                                        children: [
-                                          _buildPanelLateral(
-                                            context,
-                                            juego,
-                                            partida,
-                                          ),
-                                          const SizedBox(height: 12),
-                                          leyenda,
-                                        ],
+
+                          // Pantalla ancha: panel justo a la derecha del tablero
+                          if (constraints.maxWidth >= 860) {
+                            const anchoPanel = 320.0;
+                            final lado = min(
+                              min(constraints.maxHeight - 32, 640.0),
+                              constraints.maxWidth -
+                                  anchoPanel -
+                                  64 -
+                                  2 * _anchoIndicadores,
+                            );
+                            return Center(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    width: lado + 2 * _anchoIndicadores,
+                                    height: lado,
+                                    child: tablero,
+                                  ),
+                                  const SizedBox(width: 16),
+                                  SizedBox(
+                                    width: anchoPanel,
+                                    height: lado,
+                                    child: Center(
+                                      child: SingleChildScrollView(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            _buildPanelLateral(
+                                              context,
+                                              juego,
+                                              partida,
+                                            ),
+                                            const SizedBox(height: 12),
+                                            leyenda,
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
+                                ],
+                              ),
+                            );
+                          }
 
-                        // Pantalla angosta: tarjeta justo debajo del tablero
-                        return Column(
-                          children: [
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  12,
-                                  12,
-                                  12,
-                                  8,
-                                ),
-                                child: Center(
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 560 + 2 * _anchoIndicadores,
+                          // Pantalla angosta: tarjeta justo debajo del tablero
+                          return Column(
+                            children: [
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    12,
+                                    12,
+                                    12,
+                                    8,
+                                  ),
+                                  child: Center(
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 560 + 2 * _anchoIndicadores,
+                                      ),
+                                      child: tablero,
                                     ),
-                                    child: tablero,
                                   ),
                                 ),
                               ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                              ),
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 560,
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
                                 ),
-                                child: _buildPanelInferior(
-                                  context,
-                                  juego,
-                                  partida,
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 560,
+                                  ),
+                                  child: _buildPanelInferior(
+                                    context,
+                                    juego,
+                                    partida,
+                                  ),
                                 ),
                               ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-                              child: leyenda,
-                            ),
-                          ],
-                        );
-                      },
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+                                child: leyenda,
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                     ),
                   ),
                 );
@@ -556,122 +453,36 @@ class _TableroViewState extends State<_TableroView> {
     );
   }
 
-  void _mostrarSnack(
-    BuildContext context,
-    IconData icono,
-    String texto, {
-    SnackBarAction? accion,
-  }) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          action: accion,
-          // Con botón, el aviso se queda hasta que se pulse Siguiente
-          persist: accion != null,
-          content: Row(
-            children: [
-              Icon(icono, color: Colors.white),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  texto,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: Colors.teal.shade700,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          duration: const Duration(seconds: 3),
-        ),
-      );
-  }
-
-  /// El tablero 7x7 con los indicadores de cada zona a los lados (regla y
-  /// puntos), como en la hoja del nivel.
+  /// El tablero con los indicadores de cada zona a los lados: el mismo
+  /// widget que usa la partida en línea.
   Widget _buildTablero(
     BuildContext context,
     JuegoState juego,
     PartidaState partida,
   ) {
-    final cuadro = _buildCuadricula(context, juego, partida);
-    final tablero = partida.tablero ?? _tablero;
+    final estaEsperando = _estaEsperando(juego, partida);
+    final tablero = partida.tablero ?? _tableroConIniciales();
+    final celdas = partida.iniciada ? partida.celdas : _valoresIniciales;
 
-    Widget columna(List<String> ids) => SizedBox(
-      width: _anchoIndicadores,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          for (final id in ids) IndicadorZona(zona: tablero.zonas[id]!),
-        ],
-      ),
-    );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final lado = min(
-          constraints.maxWidth - 2 * _anchoIndicadores,
-          constraints.maxHeight.isFinite
-              ? constraints.maxHeight
-              : double.infinity,
-        );
-        return Center(
-          child: SizedBox(
-            width: lado + 2 * _anchoIndicadores,
-            height: lado,
-            child: Row(
-              children: [
-                columna(widget.nivel.indicadoresIzquierda),
-                SizedBox(width: lado, height: lado, child: cuadro),
-                columna(widget.nivel.indicadoresDerecha),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  /// Solo la cuadrícula 7x7 de casillas.
-  Widget _buildCuadricula(
-    BuildContext context,
-    JuegoState juego,
-    PartidaState partida,
-  ) {
-    return AspectRatio(
-      aspectRatio: 1,
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: 8,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: GridView.builder(
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: _tablero.columnas,
-            crossAxisSpacing: 3.0,
-            mainAxisSpacing: 3.0,
-          ),
-          itemCount: _tablero.filas * _tablero.columnas,
-          itemBuilder: (context, index) {
-            final fila = index ~/ _tablero.columnas;
-            final columna = index % _tablero.columnas;
-            return _buildCelda(context, fila, columna, juego, partida);
-          },
-        ),
-      ),
+    return TableroMultijugador(
+      nivel: widget.nivel,
+      tablero: tablero,
+      celdas: celdas,
+      iniciales: _casillasIniciales,
+      pendientesIniciales: estaEsperando
+          ? _casillasIniciales
+                .where((c) => !_valoresIniciales.containsKey(c))
+                .toSet()
+          : const {},
+      seleccionada: estaEsperando ? _casillaElegida : null,
+      sinSalida: estaEsperando
+          ? inicialesSinSalida(widget.nivel, _valoresIniciales).toSet()
+          : const {},
+      anclas: partida.anclasPosibles,
+      ancla: partida.ancla,
+      destinos: partida.destinosPosibles,
+      destinosTentativos: partida.destinosTentativos,
+      onTap: (c) => _alTocarCelda(context, c),
     );
   }
 
@@ -688,7 +499,7 @@ class _TableroViewState extends State<_TableroView> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildInfoPreparacion(),
+            _buildInfoPreparacion(juego, partida),
             const SizedBox(height: 14),
             _buildBotonComenzar(context, juego),
           ],
@@ -736,7 +547,7 @@ class _TableroViewState extends State<_TableroView> {
             const SizedBox(height: 8),
             _buildMensaje(partida),
           ] else
-            _buildInfoPreparacion(),
+            _buildInfoPreparacion(juego, partida),
           const SizedBox(height: 10),
           partida.iniciada
               ? _buildBotonTurno(context, partida)
@@ -746,12 +557,18 @@ class _TableroViewState extends State<_TableroView> {
     );
   }
 
-  Widget _buildInfoPreparacion() {
+  Widget _buildInfoPreparacion(JuegoState juego, PartidaState partida) {
     final pendientes = _casillasIniciales
         .where((c) => !_valoresIniciales.containsKey(c))
         .length;
-    // Avisa en cuanto una casilla vacía se queda sin números posibles.
-    final sinSalida = inicialesSinSalida(widget.nivel, _valoresIniciales);
+    final elegida = _casillaElegida;
+    // Si en la casilla elegida ya no cabe ningún número, se explica por qué
+    // y se ofrece mover uno aquí; además avisa de otras casillas sin salida.
+    final bloqueo = elegida == null
+        ? null
+        : bloqueoInicial(widget.nivel, _valoresIniciales, elegida);
+    final sinSalida = inicialesSinSalida(widget.nivel, _valoresIniciales)
+      ..remove(elegida);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -764,7 +581,11 @@ class _TableroViewState extends State<_TableroView> {
             Expanded(
               child: Text(
                 pendientes > 0
-                    ? 'Toca las casillas marcadas y pon los números del 1 al 6 sin repetir. Faltan $pendientes.'
+                    ? elegida == null
+                          ? 'Toca una casilla marcada y luego un número del 1 '
+                                'al 6, sin repetir. Faltan $pendientes.'
+                          : 'Toca un número para la casilla marcada (del 1 al '
+                                '6, sin repetir). Faltan $pendientes.'
                     : 'Todos los números iniciales están puestos.',
                 style: const TextStyle(
                   fontSize: 14,
@@ -775,10 +596,33 @@ class _TableroViewState extends State<_TableroView> {
             ),
           ],
         ),
+        if (bloqueo != null) ...[
+          const SizedBox(height: 10),
+          AvisoSinSalida(
+            bloqueo: bloqueo,
+            onMover: (n) => setState(() {
+              final origen = bloqueo.usadoEn[n]!;
+              _valoresIniciales
+                ..remove(origen)
+                ..[elegida!] = n;
+              _casillaElegida = null;
+            }),
+          ),
+        ],
         if (sinSalida.isNotEmpty) ...[
           const SizedBox(height: 10),
-          AvisoAnticipado(texto: avisoCasillasSinSalida(_tablero, sinSalida)),
+          AvisoAnticipado(
+            texto: avisoCasillasSinSalida(_tableroConIniciales(), sinSalida),
+          ),
         ],
+        const SizedBox(height: 12),
+        TecladoIniciales(
+          permitidos: _permitidos(elegida),
+          hayElegida: _valoresIniciales.containsKey(elegida),
+          onNumero: _ponerNumero,
+          onBorrar: _borrarNumero,
+          onAlAzar: _alAzar,
+        ),
       ],
     );
   }
@@ -915,219 +759,539 @@ class _TableroViewState extends State<_TableroView> {
       ),
     );
   }
+}
 
-  Widget _buildCelda(
-    BuildContext context,
-    int fila,
-    int columna,
-    JuegoState juego,
-    PartidaState partida,
-  ) {
-    final coordenada = Coordenada(fila, columna);
-    final zona = _tablero.zonaEn(coordenada);
+// ---------------------------------------------------------------------------
+// Tablero compartido por la partida local y la multijugador
+// ---------------------------------------------------------------------------
 
-    if (zona == null) {
-      return Container(color: Colors.transparent);
+/// Tablero de un jugador con los indicadores de zona a los lados. Es el
+/// mismo en la partida local y en la multijugador.
+class TableroMultijugador extends StatefulWidget {
+  final Nivel nivel;
+  final Tablero tablero;
+  final Map<Coordenada, int> celdas;
+  final Set<Coordenada> iniciales;
+
+  /// Casillas iniciales que faltan por llenar.
+  final Set<Coordenada> pendientesIniciales;
+
+  /// Casilla inicial a la que va el próximo número (con anillo naranja).
+  final Coordenada? seleccionada;
+
+  /// Casillas iniciales vacías donde ya no cabe ningún número (con alerta).
+  final Set<Coordenada> sinSalida;
+  final Set<Coordenada> anclas;
+  final Coordenada? ancla;
+  final Set<Coordenada> destinos;
+
+  /// Opciones de colocación al tocar un dado (sin casilla ancla aún).
+  final Set<Coordenada> destinosTentativos;
+  final void Function(Coordenada c)? onTap;
+
+  /// Lugar con el que se llenó cada zona (para tachar esos puntos).
+  final Map<String, int> lugares;
+
+  /// Lugares de cada zona ya tomados por cualquier jugador de la partida:
+  /// se tachan en las reglas de los lados (en línea).
+  final Map<String, Set<int>> lugaresOcupados;
+
+  const TableroMultijugador({
+    super.key,
+    required this.nivel,
+    required this.tablero,
+    required this.celdas,
+    required this.iniciales,
+    this.pendientesIniciales = const {},
+    this.seleccionada,
+    this.sinSalida = const {},
+    this.anclas = const {},
+    this.ancla,
+    this.destinos = const {},
+    this.destinosTentativos = const {},
+    this.onTap,
+    this.lugares = const {},
+    this.lugaresOcupados = const {},
+  });
+
+  @override
+  State<TableroMultijugador> createState() => _TableroMultijugadorState();
+}
+
+class _TableroMultijugadorState extends State<TableroMultijugador>
+    with SingleTickerProviderStateMixin {
+  /// Latido de las casillas que piden atención (destinos, casilla elegida).
+  late final AnimationController _pulso = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 850),
+  );
+
+  bool get _hayQueLatir =>
+      widget.destinos.isNotEmpty || widget.seleccionada != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _actualizarPulso();
+  }
+
+  @override
+  void didUpdateWidget(TableroMultijugador anterior) {
+    super.didUpdateWidget(anterior);
+    _actualizarPulso();
+  }
+
+  /// Solo anima cuando hace falta (no gasta batería con el tablero quieto).
+  void _actualizarPulso() {
+    if (_hayQueLatir && !_pulso.isAnimating) {
+      _pulso.repeat(reverse: true);
+    } else if (!_hayQueLatir && _pulso.isAnimating) {
+      _pulso
+        ..stop()
+        ..value = 0;
     }
+  }
 
-    final esInicial = _casillasIniciales.contains(coordenada);
-    final valor = partida.iniciada
-        ? partida.celdas[coordenada]
-        : _valoresIniciales[coordenada];
-    final estaEsperando = !partida.iniciada && juego is JuegoEsperandoValores;
+  @override
+  void dispose() {
+    _pulso.dispose();
+    super.dispose();
+  }
 
-    final esAnclaSeleccionada = partida.ancla == coordenada;
-    final esDestino = partida.destinosPosibles.contains(coordenada);
-    // Al elegir un dado (sin casilla ancla todavía): dónde podría terminar
-    // el número a colocar, con un contorno más suave que el destino real.
-    final esDestinoTentativo =
-        !esDestino && partida.destinosTentativos.contains(coordenada);
-    final colorBase = colorDeTipo(zona.tipo);
-
-    final BoxBorder borde;
-    // Anillo interior de otro color: el contraste doble (oscuro + blanco)
-    // se distingue sobre cualquier color de zona
-    Color? anillo;
-    // Flutter solo permite borderRadius con bordes de un solo color
-    var bordeUniforme = true;
-    if (esDestino) {
-      // Donde se puede poner el número: oscuro por fuera, blanco por dentro
-      borde = Border.all(color: _colorTexto, width: 3);
-      anillo = Colors.white;
-    } else if (esAnclaSeleccionada) {
-      // Ancla elegida: al revés, blanco por fuera, oscuro por dentro
-      borde = Border.all(color: Colors.white, width: 3);
-      anillo = _colorTexto;
-    } else if (esDestinoTentativo) {
-      // Opción de colocación al elegir el dado: contorno suave (se vuelve
-      // marcado al tocar la casilla ancla)
-      borde = Border.all(
-        color: _colorTexto.withValues(alpha: 0.4),
-        width: 2.5,
-      );
-    } else if (esInicial && estaEsperando) {
-      // Casillas iniciales mientras se eligen los valores: vacías con el
-      // mismo contorno marcado; ya llenas, con un borde oscuro sencillo
-      if (valor == null) {
-        borde = Border.all(color: _colorTexto, width: 4);
-        anillo = Colors.white;
-      } else {
-        borde = Border.all(color: _colorTexto, width: 2);
-      }
-    } else {
-      bordeUniforme = false;
-      borde = Border(
-        top: BorderSide(color: Colors.white.withValues(alpha: 0.5), width: 2),
-        left: BorderSide(color: Colors.white.withValues(alpha: 0.5), width: 2),
-        bottom: BorderSide(
-          color: Colors.black.withValues(alpha: 0.25),
-          width: 2,
-        ),
-        right: BorderSide(
-          color: Colors.black.withValues(alpha: 0.25),
-          width: 2,
-        ),
-      );
-    }
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.tablero;
+    Widget columna(List<String> ids) => SizedBox(
+      width: _anchoIndicadores,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          for (final id in ids)
+            if (t.zonas[id] != null)
+              IndicadorZona(
+                zona: t.zonas[id]!,
+                lugarObtenido: widget.lugares[id],
+                lugaresOcupados: widget.lugaresOcupados[id] ?? const {},
+              ),
+        ],
+      ),
+    );
 
     return LayoutBuilder(
-      builder: (context, medidas) {
-        // En casillas chicas (teléfono) el ícono del ancla taparía el
-        // número: se quita y el ancla se marca con un brillo alrededor.
-        final chica = medidas.maxWidth < tamanoMinimoParaIconos;
-        return _celdaConTamano(
-          context,
-          coordenada: coordenada,
-          valor: valor,
-          esInicial: esInicial,
-          estaEsperando: estaEsperando,
-          esAnclaSeleccionada: esAnclaSeleccionada,
-          colorBase: colorBase,
-          borde: borde,
-          anillo: anillo,
-          bordeUniforme: bordeUniforme,
-          chica: chica,
+      builder: (context, c) {
+        final alto = c.maxHeight.isFinite ? c.maxHeight : double.infinity;
+        final lado = min(min(c.maxWidth - 2 * _anchoIndicadores, alto), 640.0);
+        return SizedBox(
+          width: lado + 2 * _anchoIndicadores,
+          height: lado,
+          child: Row(
+            children: [
+              columna(widget.nivel.indicadoresIzquierda),
+              Container(
+                width: lado,
+                height: lado,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Colors.white, Color(0xFFF1F6F4)],
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFD5E3DD)),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x14000000),
+                      blurRadius: 18,
+                      offset: Offset(0, 8),
+                    ),
+                    BoxShadow(
+                      color: Color(0x0F000000),
+                      blurRadius: 4,
+                      offset: Offset(0, 1),
+                    ),
+                  ],
+                ),
+                child: GridView.builder(
+                  key: const Key('tablero-mp'),
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: t.columnas,
+                    crossAxisSpacing: 4,
+                    mainAxisSpacing: 4,
+                  ),
+                  itemCount: t.filas * t.columnas,
+                  itemBuilder: (_, i) =>
+                      _celda(Coordenada(i ~/ t.columnas, i % t.columnas)),
+                ),
+              ),
+              columna(widget.nivel.indicadoresDerecha),
+            ],
+          ),
         );
       },
     );
   }
 
-  Widget _celdaConTamano(
-    BuildContext context, {
-    required Coordenada coordenada,
-    required int? valor,
-    required bool esInicial,
-    required bool estaEsperando,
-    required bool esAnclaSeleccionada,
-    required Color colorBase,
-    required BoxBorder borde,
-    required Color? anillo,
-    required bool bordeUniforme,
-    required bool chica,
-  }) {
-    return GestureDetector(
-      onTap: () => _alTocarCelda(context, coordenada),
-      // Sin animación: interpolar entre un borde uniforme con esquinas
-      // redondeadas y el borde biselado (4 colores) hace fallar a Flutter
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: bordeUniforme ? BorderRadius.circular(6) : null,
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              colorBase.withValues(alpha: 0.5),
-              colorBase,
-              colorBase.withAlpha(200),
-            ],
+  Widget _celda(Coordenada c) {
+    final w = widget;
+    final zona = w.tablero.zonaEn(c);
+    if (zona == null) return const SizedBox.shrink();
+
+    final tocable =
+        w.onTap != null &&
+        (w.anclas.contains(c) ||
+            w.destinos.contains(c) ||
+            w.pendientesIniciales.contains(c) ||
+            (w.iniciales.contains(c) && w.seleccionada != null));
+
+    return MouseRegion(
+      cursor: tocable ? SystemMouseCursors.click : MouseCursor.defer,
+      child: GestureDetector(
+        key: Key('celda-${c.fila}-${c.columna}'),
+        onTap: w.onTap == null ? null : () => w.onTap!(c),
+        child: AnimatedBuilder(
+          animation: _pulso,
+          builder: (context, _) => CeldaTablero(
+            color: colorDeTipo(zona.tipo),
+            valor: w.celdas[c],
+            esInicial: w.iniciales.contains(c),
+            zonaCompleta: zona.estaCompleta,
+            pendiente: w.pendientesIniciales.contains(c),
+            seleccionada: w.seleccionada == c,
+            alerta: w.sinSalida.contains(c),
+            esAnclaPosible: w.anclas.contains(c),
+            esAncla: w.ancla == c,
+            esDestino: w.destinos.contains(c),
+            esDestinoTentativo: w.destinosTentativos.contains(c),
+            pulso: _pulso.value,
+            claveValor: 'c${c.fila}-${c.columna}',
           ),
-          border: borde,
-          boxShadow: [
-            const BoxShadow(
-              color: Colors.black26,
-              blurRadius: 2,
-              offset: Offset(1, 1),
-            ),
-            if (esAnclaSeleccionada && chica)
-              const BoxShadow(
-                color: colorBrilloAncla,
-                blurRadius: 8,
-                spreadRadius: 2,
-              ),
-          ],
         ),
-        child: Stack(
-          children: [
-            // Número (inicial o colocado). En casillas chicas (teléfono) el
-            // texto se encoge para no salir cortado por los bordes.
-            Positioned.fill(
-              child: Padding(
-                padding: const EdgeInsets.all(3),
+      ),
+    );
+  }
+}
+
+/// Una casilla del tablero.
+class CeldaTablero extends StatelessWidget {
+  final Color color;
+  final int? valor;
+  final bool esInicial;
+  final bool zonaCompleta;
+  final bool pendiente;
+  final bool seleccionada;
+
+  /// Casilla inicial vacía donde ya no cabe ningún número.
+  final bool alerta;
+  final bool esAnclaPosible;
+  final bool esAncla;
+  final bool esDestino;
+
+  /// Con un dado elegido (sin casilla ancla aún): aquí podría terminar el
+  /// número a colocar. Lleva un contorno suave.
+  final bool esDestinoTentativo;
+
+  /// 0..1: fase del latido (para destinos y la casilla elegida).
+  final double pulso;
+
+  /// Identifica la casilla: el número "rebota" al aparecer en ella.
+  final String claveValor;
+
+  const CeldaTablero({
+    super.key,
+    required this.color,
+    required this.valor,
+    required this.esInicial,
+    required this.zonaCompleta,
+    required this.pendiente,
+    required this.seleccionada,
+    this.alerta = false,
+    required this.esAnclaPosible,
+    required this.esAncla,
+    required this.esDestino,
+    this.esDestinoTentativo = false,
+    required this.pulso,
+    required this.claveValor,
+  });
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    // En casillas chicas (teléfono) los íconos de ancla y lápiz taparían el
+    // número: se quitan y la casilla se marca con borde y brillo.
+    builder: (context, medidas) =>
+        _celda(chica: medidas.maxWidth < tamanoMinimoParaIconos),
+  );
+
+  Widget _celda({required bool chica}) {
+    final latido = Curves.easeInOut.transform(pulso);
+
+    // Contorno según lo que se puede hacer con la casilla.
+    final Color? borde;
+    final double grosor;
+    if (seleccionada) {
+      (borde, grosor) = (
+        Color.lerp(Colors.orange.shade600, Colors.deepOrange.shade700, latido),
+        3.5,
+      );
+    } else if (esDestino) {
+      // Contorno discreto: late apenas para llamar la atención sin tapar
+      // la casilla (en teléfonos las casillas son chicas).
+      (borde, grosor) = (
+        colorTextoTablero.withValues(alpha: 0.85),
+        2 + latido,
+      );
+    } else if (esAncla) {
+      (borde, grosor) = (Colors.white, 4);
+    } else if (esAnclaPosible) {
+      (borde, grosor) = (colorTextoTablero.withValues(alpha: 0.75), 2);
+    } else if (esDestinoTentativo) {
+      // Opción de colocación al tocar un dado (aún sin casilla ancla)
+      (borde, grosor) = (colorTextoTablero.withValues(alpha: 0.4), 2);
+    } else {
+      (borde, grosor) = (Colors.white.withValues(alpha: 0.45), 1.5);
+    }
+
+    final hsl = HSLColor.fromColor(color);
+    final claro = hsl
+        .withLightness((hsl.lightness + 0.12).clamp(0.0, 1.0))
+        .toColor();
+    final oscuro = hsl
+        .withLightness((hsl.lightness - 0.08).clamp(0.0, 1.0))
+        .toColor();
+
+    final celda = Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [claro, color, oscuro],
+        ),
+        border: Border.all(color: borde ?? Colors.transparent, width: grosor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(
+              alpha: esAncla || esAnclaPosible ? 0.28 : 0.18,
+            ),
+            blurRadius: esAncla ? 6 : 2,
+            offset: Offset(0, esAncla ? 3 : 1),
+          ),
+          if (esAncla && chica)
+            const BoxShadow(
+              color: colorBrilloAncla,
+              blurRadius: 8,
+              spreadRadius: 2,
+            ),
+          if (seleccionada)
+            BoxShadow(
+              color: Colors.orange.withValues(alpha: 0.35 + 0.35 * latido),
+              blurRadius: 6 + 6 * latido,
+            ),
+        ],
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Brillo de las zonas ya completas.
+          if (zonaCompleta)
+            DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.center,
+                  colors: [
+                    Colors.white.withValues(alpha: 0.45),
+                    Colors.white.withValues(alpha: 0),
+                  ],
+                ),
+              ),
+            ),
+          // Anillo interior: doble contraste, se ve sobre cualquier color.
+          if (esDestino || esAncla)
+            Padding(
+              padding: const EdgeInsets.all(1),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(
+                    color: esDestino
+                        ? Colors.white.withValues(alpha: 0.85)
+                        : colorTextoTablero,
+                    width: esDestino ? 1 : 1.5,
+                  ),
+                ),
+              ),
+            ),
+          if (valor != null)
+            // La clave va en el hijo directo del Stack: así, aunque aparezca o
+            // desaparezca el anillo de ancla/destino, el número no se recrea
+            // ni repite el "rebote" (solo rebota cuando se coloca).
+            Center(
+              key: ValueKey('$claveValor-$valor'),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.3, end: 1),
+                duration: const Duration(milliseconds: 380),
+                curve: Curves.elasticOut,
+                builder: (_, escala, hijo) =>
+                    Transform.scale(scale: escala, child: hijo),
                 child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    valor != null ? '$valor' : '',
-                    style: TextStyle(
-                      fontSize: 22,
-                      height: 1,
-                      fontWeight: esInicial
-                          ? FontWeight.w900
-                          : FontWeight.w700,
-                      fontStyle: esInicial
-                          ? FontStyle.italic
-                          : FontStyle.normal,
-                      color: const Color(0xFF1B3B4D),
-                      shadows: [
-                        Shadow(
-                          color: Colors.white.withValues(alpha: 0.8),
-                          offset: const Offset(1, 1),
-                          blurRadius: 1,
-                        ),
-                      ],
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Text(
+                      '$valor',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: esInicial
+                            ? FontWeight.w900
+                            : FontWeight.w800,
+                        fontStyle: esInicial
+                            ? FontStyle.italic
+                            : FontStyle.normal,
+                        color: colorTextoTablero,
+                        shadows: [
+                          Shadow(
+                            color: Colors.white.withValues(alpha: 0.8),
+                            offset: const Offset(1, 1),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-            // Ícono de lápiz en casillas iniciales vacías (mientras espera);
-            // de alerta si ya no cabe ningún número en ella.
-            if (esInicial && valor == null && estaEsperando)
-              Positioned(
-                top: 6,
-                right: 6,
-                child:
-                    numerosParaInicial(
-                      widget.nivel,
-                      _valoresIniciales,
-                      coordenada,
-                    ).isEmpty
-                    ? Icon(
-                        Icons.warning_amber_rounded,
-                        key: const Key('alerta-sin-salida'),
-                        size: 18,
-                        color: Colors.orange.shade900,
-                      )
-                    : const Icon(Icons.edit, size: 14, color: _colorTexto),
-              ),
-            if (anillo != null)
-              Positioned.fill(
-                child: Container(
+            )
+          else if (pendiente)
+            // Casilla inicial vacía: un punto blanco, como en el mapa en miniatura.
+            Center(
+              child: FractionallySizedBox(
+                widthFactor: 0.28,
+                heightFactor: 0.28,
+                child: DecoratedBox(
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(2),
-                    border: Border.all(color: anillo, width: 1.5),
+                    color: Colors.white.withValues(alpha: 0.9),
+                    shape: BoxShape.circle,
                   ),
                 ),
               ),
-            // Ícono de ancla en la casilla seleccionada (solo si cabe)
-            if (esAnclaSeleccionada && !chica)
-              const Positioned(
-                top: 6,
-                right: 6,
-                child: Icon(Icons.anchor, size: 12, color: Color(0xFF1B3B4D)),
+            ),
+          if (alerta)
+            Positioned(
+              top: 2,
+              left: 2,
+              child: Icon(
+                Icons.warning_amber_rounded,
+                key: const Key('alerta-sin-salida'),
+                size: 16,
+                color: Colors.orange.shade900,
+              ),
+            ),
+          if (seleccionada && !chica)
+            const Positioned(
+              top: 3,
+              right: 3,
+              child: Icon(Icons.edit, size: 12, color: colorTextoTablero),
+            ),
+          if (esAncla && !chica)
+            const Positioned(
+              top: 3,
+              right: 3,
+              child: Icon(Icons.anchor, size: 12, color: colorTextoTablero),
+            ),
+        ],
+      ),
+    );
+
+    return AnimatedScale(
+      scale: esAncla ? 1.07 : 1,
+      duration: const Duration(milliseconds: 160),
+      child: celda,
+    );
+  }
+}
+
+/// Teclado para los números iniciales: 1 a 6 (los que no se pueden poner en
+/// la casilla elegida salen apagados), Borrar y Al azar. Es el mismo en la
+/// partida local y en la multijugador.
+class TecladoIniciales extends StatelessWidget {
+  final Set<int> permitidos;
+
+  /// La casilla elegida ya tiene número (se puede borrar).
+  final bool hayElegida;
+  final ValueChanged<int> onNumero;
+  final VoidCallback onBorrar;
+  final VoidCallback onAlAzar;
+
+  const TecladoIniciales({
+    super.key,
+    required this.permitidos,
+    required this.hayElegida,
+    required this.onNumero,
+    required this.onBorrar,
+    required this.onAlAzar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (var n = 1; n <= 6; n++)
+              SizedBox(
+                width: 44,
+                height: 44,
+                child: FilledButton(
+                  key: Key('tecla-$n'),
+                  onPressed: permitidos.contains(n) ? () => onNumero(n) : null,
+                  style: FilledButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    backgroundColor: colorTextoTablero,
+                    disabledBackgroundColor: Colors.grey.shade200,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      '$n',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        height: 1,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
               ),
           ],
         ),
-      ),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            TextButton.icon(
+              key: const Key('borrar-inicial'),
+              onPressed: hayElegida ? onBorrar : null,
+              icon: const Icon(Icons.backspace_outlined, size: 18),
+              label: const Text('Borrar'),
+            ),
+            const SizedBox(width: 8),
+            TextButton.icon(
+              key: const Key('al-azar'),
+              onPressed: onAlAzar,
+              icon: const Icon(Icons.casino_outlined, size: 18),
+              label: const Text('Al azar'),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -1373,7 +1537,8 @@ String simboloDeTipo(Tipo tipo) {
 /// Indicador de una zona al lado del tablero: cuadro de su color con el
 /// símbolo de su regla y, debajo, los puntos del 1º, 2º y 3º en llenarla.
 /// Cuando la zona está llena lleva una palomita y se tachan los puntos que
-/// se ganaron con ella; los otros lugares se apagan.
+/// se ganaron con ella. Los lugares que ya tomó cualquier otro jugador
+/// ([lugaresOcupados]) también se van tachando, como en la hoja de papel.
 class IndicadorZona extends StatelessWidget {
   final Zona zona;
 
@@ -1381,13 +1546,26 @@ class IndicadorZona extends StatelessWidget {
   /// está llena, se toma el 1º (jugando solo siempre se gana el 1º).
   final int? lugarObtenido;
 
-  const IndicadorZona({super.key, required this.zona, this.lugarObtenido});
+  /// Lugares de esta zona que ya tomó cualquier jugador de la partida.
+  final Set<int> lugaresOcupados;
+
+  const IndicadorZona({
+    super.key,
+    required this.zona,
+    this.lugarObtenido,
+    this.lugaresOcupados = const {},
+  });
 
   @override
   Widget build(BuildContext context) {
     final tipo = zona.tipo;
     final simbolo = simboloDeTipo(tipo);
     final obtenido = zona.estaCompleta ? (lugarObtenido ?? 1) : null;
+
+    // El lugar que me tocaría si llenara la zona ahora: el más bajo libre.
+    final proximo = obtenido != null
+        ? null
+        : [1, 2, 3].where((l) => !lugaresOcupados.contains(l)).firstOrNull;
 
     return Tooltip(
       message:
@@ -1455,12 +1633,17 @@ class IndicadorZona extends StatelessWidget {
                 _PuntoLugar(
                   key: Key('puntos-${zona.id}-$lugar'),
                   puntos: tipo.puntuaciones[lugar] ?? 0,
-                  color: switch (obtenido) {
-                    null => lugar == 1 ? _colorTexto : Colors.grey.shade500,
-                    final o when o == lugar => Colors.teal.shade700,
-                    _ => Colors.grey.shade300,
-                  },
-                  tachado: obtenido == lugar,
+                  color: obtenido == lugar
+                      ? Colors.teal.shade700
+                      : lugaresOcupados.contains(lugar)
+                      ? Colors.grey.shade400
+                      : obtenido != null
+                      ? Colors.grey.shade300
+                      : lugar == proximo
+                      ? _colorTexto
+                      : Colors.grey.shade500,
+                  tachado:
+                      obtenido == lugar || lugaresOcupados.contains(lugar),
                 ),
             ],
           ),
@@ -1477,7 +1660,8 @@ const tamanoMinimoParaIconos = 56.0;
 /// Brillo oscuro alrededor del ancla en casillas chicas (en vez del ícono).
 const colorBrilloAncla = Color(0xCC1B3B4D);
 
-/// Circulito con los puntos de un lugar; [tachado] = son los que se ganaron.
+/// Circulito con los puntos de un lugar; [tachado] = ese lugar ya se ganó
+/// (por mí o por otro jugador).
 class _PuntoLugar extends StatelessWidget {
   final int puntos;
   final Color color;

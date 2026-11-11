@@ -194,6 +194,19 @@ class PartidaInfo {
 
   /// Jugadores que todavía tienen que jugar esta ronda.
   int get faltan => jugadores.where((j) => j.activo && !j.yaJugo && !j.completo).length;
+
+  /// Lugares (1º, 2º, 3º…) ya tomados en cada zona por cualquier jugador.
+  /// Sirve para ir tachando esos puntos en las reglas de los lados del
+  /// tablero de todos.
+  Map<String, Set<int>> get lugaresOcupados {
+    final ocupados = <String, Set<int>>{};
+    for (final j in jugadores) {
+      j.lugares.forEach((zona, lugar) {
+        ocupados.putIfAbsent(zona, () => {}).add(lugar);
+      });
+    }
+    return ocupados;
+  }
 }
 
 class ResultadoInfo {

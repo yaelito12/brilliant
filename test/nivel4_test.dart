@@ -54,9 +54,31 @@ void main() {
         expect(casillasDe('mo'), contains(const Coordenada(3, 3)));
       });
 
-      test('hay 2 zonas rojas de 6 casillas', () {
-        expect(tablero.zonas['ro1']!.capacidad, 6);
-        expect(tablero.zonas['ro2']!.capacidad, 6);
+      test('hay 4 zonas rojas independientes de 3 casillas', () {
+        for (final id in ['ro1', 'ro2', 'ro3', 'ro4']) {
+          expect(tablero.zonas[id]!.capacidad, 3, reason: 'zona $id');
+          expect(tablero.zonas[id]!.tipo, isA<TipoRojo>());
+        }
+        expect(casillasDe('ro1'), {
+          const Coordenada(1, 1),
+          const Coordenada(2, 0),
+          const Coordenada(2, 1),
+        });
+        expect(casillasDe('ro2'), {
+          const Coordenada(1, 5),
+          const Coordenada(2, 5),
+          const Coordenada(2, 6),
+        });
+        expect(casillasDe('ro3'), {
+          const Coordenada(4, 0),
+          const Coordenada(4, 1),
+          const Coordenada(5, 1),
+        });
+        expect(casillasDe('ro4'), {
+          const Coordenada(4, 5),
+          const Coordenada(4, 6),
+          const Coordenada(5, 5),
+        });
       });
 
       test('la azul tiene 6 casillas', () {

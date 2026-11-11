@@ -10,7 +10,9 @@ import '../auth/auth_config.dart';
 import '../auth/auth_models.dart'
     show mensajeSesionReemplazada, mensajeSesionVencida;
 import '../auth/auth_repository.dart';
+import '../avisos.dart';
 import '../menu_mapas.dart';
+import '../sonidos.dart';
 import '../teclado_web.dart';
 import 'conexion_multijugador.dart';
 import 'lobby_bloc.dart';
@@ -141,19 +143,12 @@ class _VistaLobbyState extends State<_VistaLobby> {
         ),
         child: BlocListener<LobbyBloc, LobbyState>(
           listenWhen: (a, b) => b.aviso != null && a.aviso?.id != b.aviso!.id,
-          listener: (context, state) {
-            final aviso = state.aviso!;
-            ScaffoldMessenger.of(context)
-              ..hideCurrentSnackBar()
-              ..showSnackBar(
-                SnackBar(
-                  content: Text(aviso.texto),
-                  backgroundColor: aviso.esError ? Colors.red.shade700 : null,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-          },
-          child: FondoBrilliant(
+          listener: (context, state) => mostrarAviso(context, state.aviso!),
+          child: BlocListener<LobbyBloc, LobbyState>(
+            listenWhen: (a, b) =>
+                b.sonido != null && a.sonido?.id != b.sonido!.id,
+            listener: (context, state) => Sonidos.tocar(state.sonido!.sonido),
+            child: FondoBrilliant(
             child: Scaffold(
               backgroundColor: Colors.transparent,
               appBar: AppBar(
@@ -199,6 +194,7 @@ class _VistaLobbyState extends State<_VistaLobby> {
               ),
             ),
           ),
+        ),
         ),
       ),
     );

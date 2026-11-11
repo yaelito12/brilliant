@@ -157,11 +157,21 @@ void main() {
       expect(celdasDeColor(colorDeTipo(TipoRojo())), findsNWidgets(12));
     });
 
-    testWidgets('las casillas iniciales llevan un lápiz', (tester) async {
+    testWidgets('las casillas iniciales llevan un punto blanco', (
+      tester,
+    ) async {
       await abrirApp(tester);
 
-      // 6 lápices en las casillas + 1 en el mensaje del panel
-      expect(find.byIcon(Icons.edit), findsNWidgets(7));
+      // Las 6 casillas pendientes llevan el punto blanco (como en línea);
+      // el lápiz queda solo en el mensaje del panel.
+      final puntos = find.descendant(
+        of: tablero(),
+        matching: find.byWidgetPredicate(
+          (w) => w is FractionallySizedBox && w.widthFactor == 0.28,
+        ),
+      );
+      expect(puntos, findsNWidgets(6));
+      expect(find.byIcon(Icons.edit), findsOneWidget);
     });
 
     testWidgets('el panel pide los números y el botón está deshabilitado', (

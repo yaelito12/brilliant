@@ -97,7 +97,7 @@ void main() {
       expect(find.text('+7'), findsOneWidget); // morado
       expect(find.text('+6'), findsNWidgets(3)); // rojo y las 2 naranjas
       expect(find.text('+3'), findsOneWidget); // verde
-      expect(find.text('0/2'), findsOneWidget); // rojo
+      expect(find.text('0/4'), findsOneWidget); // las 4 rojas
       expect(find.text('0/1'), findsNWidgets(6));
     });
 
