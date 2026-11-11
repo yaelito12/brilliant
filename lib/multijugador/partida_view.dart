@@ -108,12 +108,18 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
     );
 
     final nivel = viendo.mapa!;
+    final leyenda = LeyendaChips(tablero: tablero);
+
+    // El mismo contenido en el mismo orden en las dos formas de la pantalla
+    // (tablero, panel, marcador y leyenda): en la computadora el panel va a
+    // la derecha del tablero y en el teléfono debajo, como en la partida de
+    // un jugador.
     return Focus(
       autofocus: true,
       onKeyEvent: (_, e) => _alPulsarTecla(e, nivel),
       child: LayoutBuilder(
         builder: (context, c) {
-          if (c.maxWidth >= 900) {
+          if (c.maxWidth >= anchoPantallaAncha) {
             return Row(
               children: [
                 Expanded(
@@ -127,7 +133,13 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(0, 16, 16, 16),
                     child: Column(
-                      children: [panel, const SizedBox(height: 12), marcador],
+                      children: [
+                        panel,
+                        const SizedBox(height: 12),
+                        marcador,
+                        const SizedBox(height: 12),
+                        leyenda,
+                      ],
                     ),
                   ),
                 ),
@@ -141,11 +153,13 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
                 constraints: const BoxConstraints(maxWidth: 600),
                 child: Column(
                   children: [
-                    panel,
-                    const SizedBox(height: 12),
                     vistaTablero,
                     const SizedBox(height: 12),
+                    panel,
+                    const SizedBox(height: 12),
                     marcador,
+                    const SizedBox(height: 12),
+                    leyenda,
                   ],
                 ),
               ),
@@ -409,6 +423,14 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
         _puedoJugar &&
         errorEnValoresIniciales(viendo.mapa!, _iniciales) == null;
 
+    // Quién se salió del juego y se está esperando (yo no: para mí ya está
+    // la barra de "reconectando" arriba de la pantalla).
+    final desconectados = [
+      for (final j in p.jugadores)
+        if (j.activo && !j.conectado && !j.completo && j.id != yo?.id)
+          j.nametag,
+    ];
+
     return Card(
       color: Colors.white,
       child: Padding(
@@ -417,6 +439,13 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (desconectados.isNotEmpty && !p.terminada) ...[
+              AvisoEnPausa(
+                jugadores: desconectados,
+                esperas: widget.state.esperaReconexion,
+              ),
+              const SizedBox(height: 12),
+            ],
             Row(
               children: [
                 Expanded(
@@ -763,6 +792,145 @@ class Marcador extends StatelessWidget {
       _ => (Icons.hourglass_top, Colors.blueGrey),
     };
     return Icon(icono, color: color, size: 20);
+  }
+}
+
+/// Aviso de que la partida está en pausa porque alguien se salió del juego.
+///
+/// No se le pasan los turnos a nadie: se espera a que vuelva mientras corre
+/// la cuenta atrás ([esperas] dice hasta cuándo, según el servidor). Si no
+/// vuelve a tiempo, pierde y queda fuera, y la partida sigue sin él.
+class AvisoEnPausa extends StatefulWidget {
+  /// Nametags de quienes perdieron la conexión y se están esperando.
+  final List<String> jugadores;
+
+  /// Hasta cuándo se espera a cada uno (nametag → límite).
+  final Map<String, DateTime> esperas;
+
+  const AvisoEnPausa({
+    super.key,
+    required this.jugadores,
+    required this.esperas,
+  });
+
+  @override
+  State<AvisoEnPausa> createState() => _AvisoEnPausaState();
+}
+
+class _AvisoEnPausaState extends State<AvisoEnPausa> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Un latido por segundo, solo para redibujar la cuenta atrás.
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  /// "Beto", "Beto y Carla", "Beto, Carla y Dani".
+  String get _nombres {
+    final n = widget.jugadores;
+    if (n.length <= 1) return n.join();
+    return '${n.sublist(0, n.length - 1).join(', ')} y ${n.last}';
+  }
+
+  /// Segundos que faltan para que se acabe la espera (null si no se sabe:
+  /// por ejemplo si acabo de reconectar y no vi cuándo se fue).
+  int? get _segundos {
+    final limites = [
+      for (final nametag in widget.jugadores)
+        if (widget.esperas[nametag] != null) widget.esperas[nametag]!,
+    ];
+    if (limites.isEmpty) return null;
+    limites.sort();
+    final resta = limites.last.difference(DateTime.now());
+    return max(0, (resta.inMilliseconds / 1000).ceil());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final varios = widget.jugadores.length > 1;
+    final segundos = _segundos;
+    final naranja = Colors.orange.shade800;
+
+    return Container(
+      key: const Key('aviso-en-pausa'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade300),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.pause_circle_outline, color: naranja, size: 22),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Partida en pausa',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.orange.shade900,
+                  ),
+                ),
+              ),
+              if (segundos != null)
+                Text(
+                  '${segundos}s',
+                  key: const Key('cuenta-pausa'),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                    color: naranja,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            segundos != null
+                ? '$_nombres ${varios ? 'se salieron' : 'se salió'} del juego. '
+                      'Nadie pasa de turno: la ronda espera $segundos s más a '
+                      'que ${varios ? 'vuelvan' : 'vuelva'}. Si no '
+                      '${varios ? 'vuelven' : 'vuelve'}, '
+                      '${varios ? 'pierden' : 'pierde'} y '
+                      '${varios ? 'quedan' : 'queda'} fuera.'
+                : '$_nombres ${varios ? 'se salieron' : 'se salió'} del juego. '
+                      'Nadie pasa de turno mientras ${varios ? 'vuelven' : 'vuelve'}; '
+                      'si no ${varios ? 'vuelven' : 'vuelve'} en unos segundos, '
+                      '${varios ? 'pierden' : 'pierde'} y '
+                      '${varios ? 'quedan' : 'queda'} fuera.',
+            style: TextStyle(fontSize: 13, color: Colors.orange.shade900),
+          ),
+          if (segundos != null) ...[
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: (segundos / graciaReconexionPorDefecto).clamp(0.0, 1.0),
+                minHeight: 6,
+                backgroundColor: Colors.orange.shade100,
+                valueColor: AlwaysStoppedAnimation(naranja),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 

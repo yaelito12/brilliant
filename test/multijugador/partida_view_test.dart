@@ -1,5 +1,5 @@
 import 'package:brilliant/multijugador/partida_view.dart';
-import 'package:brilliant/tablero_ui.dart' show DadoAnimado;
+import 'package:brilliant/tablero_ui.dart' show CeldaTablero, DadoAnimado;
 import 'package:brilliant_reglas/brilliant_reglas.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
@@ -415,6 +415,102 @@ void main() {
     testWidgets('sin desbordes en un teléfono', (tester) async {
       await enPartida(tester, partidaJson(), tamano: pantallaAngosta);
       expect(tester.takeException(), isNull);
+      await cerrar(tester);
+    });
+  });
+
+  group('alguien pierde la conexión', () {
+    /// La partida con Beto sin conexión (o de vuelta, con [conectado]).
+    Map<String, Object?> conBetoCaido({bool conectado = false}) => partidaJson(
+      jugadores: [
+        jugadorPartidaJson('u1', 'Ana', celdas: iniciales1),
+        jugadorPartidaJson('u2', 'Beto', nivel: 3, conectado: conectado),
+      ],
+    );
+
+    testWidgets('la partida queda en pausa con cuenta atrás, y no pasa el turno', (
+      tester,
+    ) async {
+      final ws = await enPartida(tester, partidaJson());
+      final pausa = find.byKey(const Key('aviso-en-pausa'));
+      expect(pausa, findsNothing);
+
+      await servidorDice(tester, ws, {
+        'tipo': 'partida',
+        'partida': conBetoCaido(),
+        'evento': {
+          'tipo': 'desconectado',
+          'nametag': 'Beto',
+          'graciaSegundos': 10,
+        },
+      });
+
+      expect(pausa, findsOneWidget);
+      expect(find.byKey(const Key('cuenta-pausa')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: pausa,
+          matching: find.textContaining('Nadie pasa de turno'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: pausa,
+          matching: find.textContaining('pierde y queda fuera'),
+        ),
+        findsOneWidget,
+      );
+
+      // Al volver se quita el aviso y la partida sigue.
+      await servidorDice(tester, ws, {
+        'tipo': 'partida',
+        'partida': conBetoCaido(conectado: true),
+        'evento': {'tipo': 'reconectado', 'nametag': 'Beto'},
+      });
+      expect(pausa, findsNothing);
+      await cerrar(tester);
+    });
+
+    testWidgets('si no vuelve, pierde y queda fuera', (tester) async {
+      final ws = await enPartida(tester, partidaJson());
+      await servidorDice(tester, ws, {
+        'tipo': 'partida',
+        'partida': conBetoCaido(),
+        'evento': {
+          'tipo': 'desconectado',
+          'nametag': 'Beto',
+          'graciaSegundos': 10,
+        },
+      });
+      expect(find.byKey(const Key('aviso-en-pausa')), findsOneWidget);
+
+      // Vencida la espera, el servidor lo saca: ya no se espera a nadie.
+      await servidorDice(tester, ws, {
+        'tipo': 'partida',
+        'partida': partidaJson(
+          jugadores: [
+            jugadorPartidaJson('u1', 'Ana', celdas: iniciales1),
+            jugadorPartidaJson(
+              'u2',
+              'Beto',
+              nivel: 3,
+              conectado: false,
+              estado: 'abandono',
+            ),
+          ],
+        ),
+        'evento': {'tipo': 'abandono', 'nametag': 'Beto'},
+      });
+
+      expect(find.byKey(const Key('aviso-en-pausa')), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('marcador-Beto')),
+          matching: find.text('abandonó'),
+        ),
+        findsOneWidget,
+      );
       await cerrar(tester);
     });
   });

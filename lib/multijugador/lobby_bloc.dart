@@ -90,6 +90,11 @@ class Aviso {
   bool get esError => tipo == TipoAviso.error;
 }
 
+/// Segundos que se espera a quien pierde la conexión en plena partida, si el
+/// servidor no los dice (es lo que trae el evento `desconectado`). Pasado ese
+/// tiempo sin volver, pierde y queda fuera.
+const graciaReconexionPorDefecto = 10;
+
 /// Efecto de sonido para tocar una sola vez. [id] cambia con cada uno.
 class EfectoSonido {
   final int id;
@@ -115,6 +120,11 @@ class LobbyState {
   /// Efecto de sonido pendiente de tocar (una sola vez).
   final EfectoSonido? sonido;
 
+  /// Hasta cuándo se espera a cada jugador que perdió la conexión en plena
+  /// partida (nametag → límite, según el reloj de este dispositivo). Mientras
+  /// haya alguno, la ronda está en pausa: a nadie se le pasan los turnos.
+  final Map<String, DateTime> esperaReconexion;
+
   const LobbyState({
     this.conexion = EstadoConexion.conectando,
     this.yo,
@@ -124,6 +134,7 @@ class LobbyState {
     this.esperando = false,
     this.aviso,
     this.sonido,
+    this.esperaReconexion = const {},
   });
 
   bool get conectado => conexion == EstadoConexion.conectado;
@@ -139,6 +150,7 @@ class LobbyState {
     bool? esperando,
     Aviso? aviso,
     EfectoSonido? sonido,
+    Map<String, DateTime>? esperaReconexion,
   }) => LobbyState(
     conexion: conexion ?? this.conexion,
     yo: yo ?? this.yo,
@@ -148,6 +160,7 @@ class LobbyState {
     esperando: esperando ?? this.esperando,
     aviso: aviso ?? this.aviso,
     sonido: sonido ?? this.sonido,
+    esperaReconexion: esperaReconexion ?? this.esperaReconexion,
   );
 }
 
@@ -238,6 +251,7 @@ class LobbyBloc extends Bloc<LobbyEvent, LobbyState> {
     partida: () => null,
     resultados: () => null,
     esperando: false,
+    esperaReconexion: const {},
   );
 
   void _alCambiarConexion(_ConexionCambio e, Emitter<LobbyState> emit) {
@@ -281,6 +295,7 @@ class LobbyBloc extends Bloc<LobbyEvent, LobbyState> {
             esperando: false,
             aviso: aviso,
             sonido: sonido == null ? null : _sonar(sonido),
+            esperaReconexion: _esperas(m['evento'], partida),
           ));
         case 'partida_terminada':
           emit(state.copyWith(
@@ -288,6 +303,7 @@ class LobbyBloc extends Bloc<LobbyEvent, LobbyState> {
             resultados: () => ResultadosPartida.fromJson(m),
             esperando: false,
             sonido: _sonar(Sonido.victoria),
+            esperaReconexion: const {},
           ));
         case 'saliste':
           emit(_fueraDeSala());
@@ -325,6 +341,38 @@ class LobbyBloc extends Bloc<LobbyEvent, LobbyState> {
       _ => (null, TipoAviso.info),
     };
     return texto == null ? null : _aviso(texto, tipo: tipo);
+  }
+
+  /// A quién se está esperando porque perdió la conexión, y hasta cuándo.
+  ///
+  /// La cuenta atrás empieza cuando llega el evento `desconectado` (el
+  /// servidor manda cuántos segundos de gracia da) y se borra en cuanto el
+  /// jugador vuelve, se rinde, abandona o ya no está en la partida. Mientras
+  /// haya alguien en la lista, la ronda no avanza: nadie pasa de turno solo.
+  Map<String, DateTime> _esperas(Object? evento, PartidaInfo partida) {
+    final esperas = {...state.esperaReconexion};
+    if (evento is Map && evento['nametag'] is String) {
+      final quien = evento['nametag'] as String;
+      switch (evento['tipo']) {
+        case 'desconectado':
+          final gracia = evento['graciaSegundos'];
+          esperas[quien] = DateTime.now().add(
+            Duration(
+              seconds: gracia is int ? gracia : graciaReconexionPorDefecto,
+            ),
+          );
+        case 'reconectado' || 'abandono' || 'concedio':
+          esperas.remove(quien);
+      }
+    }
+    // Solo los que siguen jugando y siguen sin conexión (así, tras una
+    // reconexión propia, la lista queda como la ve el servidor).
+    esperas.removeWhere(
+      (nametag, _) => !partida.jugadores.any(
+        (j) => j.nametag == nametag && j.activo && !j.conectado && !j.completo,
+      ),
+    );
+    return esperas;
   }
 
   /// Nombre del color de la zona [id] en el mapa del nivel [nivel].
@@ -399,12 +447,12 @@ class LobbyBloc extends Bloc<LobbyEvent, LobbyState> {
         return (null, null);
       case 'desconectado' when !soyYo:
         final gracia = evento['graciaSegundos'];
+        final cuanto = gracia is int ? '$gracia segundos' : 'unos segundos';
         return (
           _aviso(
-            gracia is int
-                ? '$quien perdió la conexión: tiene $gracia s para volver '
-                      'o queda fuera. La ronda lo espera.'
-                : '$quien perdió la conexión. La ronda lo espera unos segundos.',
+            '$quien se salió del juego. A nadie se le pasan los turnos: la '
+                'partida queda en pausa $cuanto esperando a que vuelva. Si no '
+                'vuelve, pierde y queda fuera.',
             tipo: TipoAviso.alerta,
           ),
           null,

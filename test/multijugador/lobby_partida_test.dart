@@ -102,11 +102,19 @@ void main() {
 
     test('mis puntos y mi tablero completo', () async {
       expect(await avisosDe([
+        // Sin zonas llenas no se avisa cada jugada.
         {'tipo': 'jugada', 'nametag': 'Ana', 'puntosGanados': 0},
-        {'tipo': 'jugada', 'nametag': 'Ana', 'puntosGanados': 7},
+        {
+          'tipo': 'jugada',
+          'nametag': 'Ana',
+          'puntosGanados': 7,
+          'zonas': [
+            {'zona': 'mo1', 'lugar': 1, 'puntos': 7},
+          ],
+        },
         {'tipo': 'jugada', 'nametag': 'Ana', 'puntosGanados': 4, 'completo': true},
       ]), [
-        '¡Zona completada! +7 puntos.',
+        '¡Llenaste la zona morada (1.º lugar, +7)! Ganaste 7 puntos.',
         '¡Completaste tu tablero! La partida termina al acabar la ronda.',
       ]);
     });
@@ -115,16 +123,18 @@ void main() {
       expect(await avisosDe([
         {'tipo': 'jugada', 'nametag': 'Beto', 'puntosGanados': 7},
         {'tipo': 'paso', 'nametag': 'Beto'},
-        {'tipo': 'desconectado', 'nametag': 'Beto'},
+        {'tipo': 'desconectado', 'nametag': 'Beto', 'graciaSegundos': 10},
         {'tipo': 'reconectado', 'nametag': 'Beto'},
         {'tipo': 'concedio', 'nametag': 'Beto'},
         {'tipo': 'abandono', 'nametag': 'Carla'},
         {'tipo': 'jugada', 'nametag': 'Carla', 'completo': true},
       ]), [
-        'Beto perdió la conexión. Sus turnos se pasan solos.',
-        'Beto volvió.',
+        'Beto se salió del juego. A nadie se le pasan los turnos: la partida '
+            'queda en pausa 10 segundos esperando a que vuelva. Si no vuelve, '
+            'pierde y queda fuera.',
+        'Beto volvió. ¡Sigue la partida!',
         'Beto se rindió.',
-        'Carla no volvió: abandonó la partida.',
+        'Carla no volvió a tiempo: pierde y queda fuera de la partida.',
         'Carla completó su tablero: esta es la última ronda.',
       ]);
     });

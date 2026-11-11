@@ -167,7 +167,10 @@ class _VistaLobbyState extends State<_VistaLobby> {
                       sala != null && sala.jugando && state.partida != null;
                   return Column(
                     children: [
-                      BarraConexion(estado: state.conexion),
+                      BarraConexion(
+                        estado: state.conexion,
+                        enPartida: enPartida,
+                      ),
                       Expanded(
                         // La partida usa toda la pantalla; el lobby, una columna centrada.
                         child: enPartida
@@ -337,7 +340,16 @@ class _VistaLobbyState extends State<_VistaLobby> {
 /// Avisa si la conexión no está lista (conectando, reconectando, etc.).
 class BarraConexion extends StatelessWidget {
   final EstadoConexion estado;
-  const BarraConexion({super.key, required this.estado});
+
+  /// Hay una partida en curso: al caerse la conexión se avisa cuánto tiempo
+  /// hay para volver antes de perderla.
+  final bool enPartida;
+
+  const BarraConexion({
+    super.key,
+    required this.estado,
+    this.enPartida = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -349,7 +361,11 @@ class BarraConexion extends StatelessWidget {
         null,
       ),
       EstadoConexion.reconectando => (
-        'Se perdió la conexión. Reconectando… Tu lugar se guarda unos segundos.',
+        enPartida
+            ? 'Te saliste del juego. Reconectando… Tienes unos '
+                  '$graciaReconexionPorDefecto segundos para volver: si no, '
+                  'pierdes la partida y quedas fuera.'
+            : 'Se perdió la conexión. Reconectando… Tu lugar se guarda unos segundos.',
         Colors.orange.shade800,
         null,
       ),
@@ -652,11 +668,13 @@ class _TarjetaCodigo extends StatelessWidget {
                   onPressed: () async {
                     await Clipboard.setData(ClipboardData(text: codigo));
                     if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Código copiado.'),
-                        behavior: SnackBarBehavior.floating,
-                      ),
+                    // La misma notificación que el resto del juego (antes
+                    // era el recuadro negro de serie).
+                    mostrarNotificacion(
+                      context,
+                      'Código copiado: pásalo a tus amigos.',
+                      tipo: TipoAviso.exito,
+                      icono: Icons.copy_all,
                     );
                   },
                 ),

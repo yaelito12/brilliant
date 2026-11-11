@@ -347,12 +347,12 @@ class _TableroViewState extends State<_TableroView> {
                       body: LayoutBuilder(
                         builder: (context, constraints) {
                           final tablero = _buildTablero(context, juego, partida);
-                          final leyenda = _LeyendaChips(
+                          final leyenda = LeyendaChips(
                             tablero: partida.tablero ?? _tableroConIniciales(),
                           );
 
                           // Pantalla ancha: panel justo a la derecha del tablero
-                          if (constraints.maxWidth >= 860) {
+                          if (constraints.maxWidth >= anchoPantallaAncha) {
                             const anchoPanel = 320.0;
                             final lado = min(
                               min(constraints.maxHeight - 32, 640.0),
@@ -494,7 +494,7 @@ class _TableroViewState extends State<_TableroView> {
     PartidaState partida,
   ) {
     if (!partida.iniciada) {
-      return _Tarjeta(
+      return TarjetaPanel(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -507,7 +507,7 @@ class _TableroViewState extends State<_TableroView> {
       );
     }
 
-    return _Tarjeta(
+    return TarjetaPanel(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -531,7 +531,7 @@ class _TableroViewState extends State<_TableroView> {
     JuegoState juego,
     PartidaState partida,
   ) {
-    return _Tarjeta(
+    return TarjetaPanel(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -826,8 +826,25 @@ class _TableroMultijugadorState extends State<TableroMultijugador>
     duration: const Duration(milliseconds: 850),
   );
 
-  bool get _hayQueLatir =>
-      widget.destinos.isNotEmpty || widget.seleccionada != null;
+  /// Cuántas veces late al marcar casillas nuevas. Después se queda quieto:
+  /// llama la atención un rato y no deja el tablero animado toda la partida
+  /// (así no gasta batería ni marea).
+  static const _latidos = 3;
+
+  /// Qué está latiendo ahora: mientras no cambie, el latido no se reinicia
+  /// (la pantalla se redibuja a cada segundo por el reloj de la ronda).
+  Object? _razonDelLatido;
+
+  /// Cambia con cada latido nuevo: así el latido viejo, al acabarse, no
+  /// interrumpe al que lo sustituyó.
+  int _generacion = 0;
+
+  Object? get _razon => widget.destinos.isEmpty && widget.seleccionada == null
+      ? null
+      : Object.hash(
+          widget.seleccionada,
+          Object.hashAllUnordered(widget.destinos),
+        );
 
   @override
   void initState() {
@@ -843,13 +860,18 @@ class _TableroMultijugadorState extends State<TableroMultijugador>
 
   /// Solo anima cuando hace falta (no gasta batería con el tablero quieto).
   void _actualizarPulso() {
-    if (_hayQueLatir && !_pulso.isAnimating) {
-      _pulso.repeat(reverse: true);
-    } else if (!_hayQueLatir && _pulso.isAnimating) {
-      _pulso
-        ..stop()
-        ..value = 0;
-    }
+    final razon = _razon;
+    if (razon == _razonDelLatido) return;
+    _razonDelLatido = razon;
+    final generacion = ++_generacion;
+    _pulso
+      ..stop()
+      ..value = 0;
+    if (razon == null) return;
+    _pulso.repeat(reverse: true, count: _latidos).whenComplete(() {
+      // Al terminar los latidos, las casillas quedan en reposo.
+      if (mounted && generacion == _generacion) _pulso.value = 0;
+    });
   }
 
   @override
@@ -861,26 +883,42 @@ class _TableroMultijugadorState extends State<TableroMultijugador>
   @override
   Widget build(BuildContext context) {
     final t = widget.tablero;
-    Widget columna(List<String> ids) => SizedBox(
-      width: _anchoIndicadores,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          for (final id in ids)
-            if (t.zonas[id] != null)
-              IndicadorZona(
-                zona: t.zonas[id]!,
-                lugarObtenido: widget.lugares[id],
-                lugaresOcupados: widget.lugaresOcupados[id] ?? const {},
-              ),
-        ],
-      ),
+    // Tantos huecos como indicadores tenga el lado más cargado: los dos
+    // lados quedan a la misma altura y, si el tablero es chico, cada
+    // indicador se achica en vez de quedar cortado (antes, en pantallas
+    // bajas, los últimos de cada lado no se veían).
+    final huecos = max(
+      widget.nivel.indicadoresIzquierda.length,
+      widget.nivel.indicadoresDerecha.length,
     );
 
     return LayoutBuilder(
       builder: (context, c) {
         final alto = c.maxHeight.isFinite ? c.maxHeight : double.infinity;
         final lado = min(min(c.maxWidth - 2 * _anchoIndicadores, alto), 640.0);
+
+        Widget columna(List<String> ids) => SizedBox(
+          width: _anchoIndicadores,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              for (final id in ids)
+                if (t.zonas[id] != null)
+                  SizedBox(
+                    height: huecos == 0 ? null : lado / huecos,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: IndicadorZona(
+                        zona: t.zonas[id]!,
+                        lugarObtenido: widget.lugares[id],
+                        lugaresOcupados: widget.lugaresOcupados[id] ?? const {},
+                      ),
+                    ),
+                  ),
+            ],
+          ),
+        );
+
         return SizedBox(
           width: lado + 2 * _anchoIndicadores,
           height: lado,
@@ -1273,8 +1311,11 @@ class TecladoIniciales extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 6),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        // Wrap y no Row: en el panel angosto de la computadora los dos
+        // botones no caben en una línea y antes se desbordaban.
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
           children: [
             TextButton.icon(
               key: const Key('borrar-inicial'),
@@ -1282,7 +1323,6 @@ class TecladoIniciales extends StatelessWidget {
               icon: const Icon(Icons.backspace_outlined, size: 18),
               label: const Text('Borrar'),
             ),
-            const SizedBox(width: 8),
             TextButton.icon(
               key: const Key('al-azar'),
               onPressed: onAlAzar,
@@ -1399,7 +1439,7 @@ class _LeyendaZonas extends StatelessWidget {
         ),
       );
 
-    return _Tarjeta(
+    return TarjetaPanel(
       titulo: 'Puntos al completar una zona',
       icono: Icons.emoji_events_outlined,
       child: Column(
@@ -1523,6 +1563,12 @@ const _colorTexto = colorTextoTablero;
 
 /// Ancho de cada columna de indicadores a los lados del tablero.
 const _anchoIndicadores = 48.0;
+
+/// A partir de este ancho la pantalla se considera ancha (computadora o
+/// tablet acostada): el panel va al lado del tablero en vez de abajo. Lo
+/// usan igual la partida de un jugador y la partida en línea, para que las
+/// dos cambien de forma en el mismo punto.
+const anchoPantallaAncha = 900.0;
 
 /// Símbolo de la regla de cada tipo, como en la hoja del nivel.
 String simboloDeTipo(Tipo tipo) {
@@ -1727,12 +1773,12 @@ class _PuntoLugar extends StatelessWidget {
 }
 
 /// Tarjeta blanca del panel lateral, con título opcional.
-class _Tarjeta extends StatelessWidget {
+class TarjetaPanel extends StatelessWidget {
   final String? titulo;
   final IconData? icono;
   final Widget child;
 
-  const _Tarjeta({this.titulo, this.icono, required this.child});
+  const TarjetaPanel({super.key, this.titulo, this.icono, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -1892,10 +1938,10 @@ class _DadoElegible extends StatelessWidget {
 /// Leyenda compacta: un chip por color con sus puntos y zonas completas.
 /// Al pasar el mouse (o mantener presionado) se ve la regla; el botón
 /// "Reglas" abre la explicación completa.
-class _LeyendaChips extends StatelessWidget {
+class LeyendaChips extends StatelessWidget {
   final Tablero tablero;
 
-  const _LeyendaChips({required this.tablero});
+  const LeyendaChips({super.key, required this.tablero});
 
   @override
   Widget build(BuildContext context) {

@@ -44,6 +44,10 @@ echo ============================================================
 echo   La primera vez tarda un poco en compilar. El navegador se
 echo   abrira solo cuando el juego este listo.
 echo.
+echo   Si en esta PC ves una version vieja del juego (mapas o
+echo   avisos que ya cambiaron), recarga la pagina con Ctrl+F5:
+echo   el navegador se queda con la copia guardada.
+echo.
 
 rem Abre el navegador de esta PC cuando el puerto 5000 ya responde.
 start "" /min powershell -NoProfile -WindowStyle Hidden -Command "while (-not (Test-NetConnection localhost -Port 5000 -InformationLevel Quiet -WarningAction SilentlyContinue)) { Start-Sleep 2 }; Start-Sleep 3; Start-Process 'http://localhost:5000'"
