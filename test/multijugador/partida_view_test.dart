@@ -299,13 +299,6 @@ void main() {
       await cerrar(tester);
     });
 
-    testWidgets('muestra el tiempo que queda', (tester) async {
-      await enPartida(tester, partidaJson(msRestantes: 45000));
-      final texto = tester.widget<Text>(find.byKey(const Key('cuenta-regresiva'))).data!;
-      expect(texto, anyOf('0:45', '0:44'));
-      await cerrar(tester);
-    });
-
     testWidgets('rendirse pide confirmar y manda conceder', (tester) async {
       final ws = await enPartida(tester, partidaJson());
       await tester.ensureVisible(find.byKey(const Key('rendirse')));

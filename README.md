@@ -131,7 +131,8 @@ un código de 6 letras). Todos juegan el mismo mapa: lo elige quien crea la sala
 persona lo puede cambiar. La partida empieza cuando todos (2 a 6) pulsan "Estoy listo". Si se corta la conexión, la app reconecta sola y vuelve a la sala.
 
 En la partida cada uno juega **su propio tablero con los mismos dados**: pone sus 6 números
-iniciales (se toca una casilla y luego el número) y en cada ronda coloca un número o pasa (60 s por ronda). El marcador muestra los puntos
+iniciales (se toca una casilla y luego el número) y en cada ronda coloca un número o pasa, sin reloj:
+la ronda sigue cuando todos jugaron. El marcador muestra los puntos
 y qué está haciendo cada jugador; tocando a alguien se ve su tablero. Se puede **rendir** en
 cualquier momento. Al terminar aparecen los resultados y, si todos vuelven a pulsar "listo",
 empieza la revancha.

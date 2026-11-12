@@ -12,8 +12,8 @@ import 'lobby_bloc.dart';
 import 'modelos.dart';
 
 /// Pantalla de una partida multijugador: mi tablero (o el de otro jugador, si
-/// lo elijo en el marcador), los dados de la ronda, el tiempo que queda, los
-/// botones de pasar y rendirse y el marcador de todos.
+/// lo elijo en el marcador), los dados de la ronda, los botones de pasar y
+/// rendirse y el marcador de todos.
 ///
 /// La app solo propone jugadas: el servidor las valida y manda el estado
 /// nuevo. Lo único local es el ancla elegida y los números iniciales que se
@@ -460,8 +460,6 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
                     ),
                   ),
                 ),
-                if (!p.terminada && p.limite != null)
-                  CuentaRegresiva(limite: p.limite!),
               ],
             ),
             Text(
@@ -930,60 +928,6 @@ class _AvisoEnPausaState extends State<AvisoEnPausa> {
           ],
         ],
       ),
-    );
-  }
-}
-
-/// Cuenta atrás hasta [limite] (mm:ss); en rojo los últimos 10 segundos.
-class CuentaRegresiva extends StatefulWidget {
-  final DateTime limite;
-  const CuentaRegresiva({super.key, required this.limite});
-
-  @override
-  State<CuentaRegresiva> createState() => _CuentaRegresivaState();
-}
-
-class _CuentaRegresivaState extends State<CuentaRegresiva> {
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final resta = widget.limite.difference(DateTime.now());
-    final s = max(0, (resta.inMilliseconds / 1000).ceil());
-    final urgente = s <= 10;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          Icons.timer,
-          size: 18,
-          color: urgente ? Colors.red.shade700 : Colors.blueGrey,
-        ),
-        const SizedBox(width: 4),
-        Text(
-          '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}',
-          key: const Key('cuenta-regresiva'),
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontFeatures: const [FontFeature.tabularFigures()],
-            color: urgente ? Colors.red.shade700 : colorTextoTablero,
-          ),
-        ),
-      ],
     );
   }
 }

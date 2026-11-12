@@ -33,18 +33,15 @@ void main() {
 
   group('modelo', () {
     test('PartidaInfo lee el JSON del servidor', () {
-      final ahora = DateTime(2026, 1, 1, 12);
       final p = PartidaInfo.fromJson(
-        partidaJson(msRestantes: 30000, jugadores: [
+        partidaJson(jugadores: [
           jugadorPartidaJson('u1', 'Ana', celdas: iniciales1, lugares: {'az1': 2}, puntos: 5, yaJugo: true),
           jugadorPartidaJson('u2', 'Beto', estado: 'concedio'),
           jugadorPartidaJson('u3', 'Carla'),
         ]),
-        recibido: ahora,
       );
       expect(p.jugando, isTrue);
       expect(p.dados, [1, 3]);
-      expect(p.limite, ahora.add(const Duration(seconds: 30)));
       final ana = p.jugador('u1')!;
       expect(ana.celdas[const Coordenada(0, 2)], 1);
       expect(ana.lugares, {'az1': 2});

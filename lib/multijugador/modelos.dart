@@ -146,10 +146,6 @@ class PartidaInfo {
   /// Puntos con los que se gana (depende de cuántos jugadores empezaron).
   final int puntosMeta;
   final List<int>? dados;
-
-  /// Cuándo se acaba el turno (o el tiempo para los iniciales), según el
-  /// reloj de este dispositivo.
-  final DateTime? limite;
   final List<JugadorPartidaInfo> jugadores;
 
   const PartidaInfo({
@@ -158,22 +154,16 @@ class PartidaInfo {
     required this.maxRondas,
     required this.puntosMeta,
     required this.dados,
-    required this.limite,
     required this.jugadores,
   });
 
-  /// [recibido] es cuándo llegó el mensaje: el servidor manda los
-  /// milisegundos que faltan (no una hora) para no depender de que los
-  /// relojes estén sincronizados.
-  factory PartidaInfo.fromJson(Map<String, dynamic> j, {DateTime? recibido}) {
-    final ms = j['msRestantes'] as int?;
+  factory PartidaInfo.fromJson(Map<String, dynamic> j) {
     return PartidaInfo(
       fase: j['fase'] as String,
       ronda: j['ronda'] as int,
       maxRondas: j['maxRondas'] as int,
       puntosMeta: j['puntosMeta'] as int,
       dados: (j['dados'] as List?)?.cast<int>(),
-      limite: ms == null ? null : (recibido ?? DateTime.now()).add(Duration(milliseconds: ms)),
       jugadores: [
         for (final x in j['jugadores'] as List)
           JugadorPartidaInfo.fromJson(x as Map<String, dynamic>),

@@ -144,7 +144,6 @@ Map<String, Object?> partidaJson({
   String fase = 'jugando',
   int ronda = 1,
   List<int>? dados = const [1, 3],
-  int? msRestantes = 60000,
   List<Map<String, Object?>>? jugadores,
 }) => {
   'fase': fase,
@@ -152,7 +151,7 @@ Map<String, Object?> partidaJson({
   'maxRondas': 100,
   'puntosMeta': 26,
   'dados': fase == 'iniciales' ? null : dados,
-  'msRestantes': msRestantes,
+  'msRestantes': null,
   'jugadores': jugadores ??
       [
         jugadorPartidaJson('u1', 'Ana', celdas: fase == 'iniciales' ? [] : iniciales1),
