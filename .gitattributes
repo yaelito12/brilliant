@@ -1,0 +1,2 @@
+# El APK es binario: que git no le toque los fin de línea (core.autocrlf).
+*.apk binary
