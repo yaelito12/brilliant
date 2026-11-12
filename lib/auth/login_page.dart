@@ -11,7 +11,11 @@ import 'validadores.dart';
 class LoginPage extends StatefulWidget {
   final VoidCallback onIrARegistro;
 
-  const LoginPage({super.key, required this.onIrARegistro});
+  /// Fila extra al final de la tarjeta: el servidor elegido (solo en móvil
+  /// y escritorio, donde la dirección se escribe a mano).
+  final Widget? pie;
+
+  const LoginPage({super.key, required this.onIrARegistro, this.pie});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -107,6 +111,7 @@ class _LoginPageState extends State<LoginPage> {
               onPressed: state.cargando ? null : widget.onIrARegistro,
               child: const Text('¿No tienes cuenta? Crea una'),
             ),
+            if (widget.pie != null) widget.pie!,
           ],
         );
       },

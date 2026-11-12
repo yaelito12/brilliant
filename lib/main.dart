@@ -5,16 +5,28 @@ import 'auth/auth_api.dart';
 import 'auth/auth_config.dart';
 import 'auth/auth_gate.dart';
 import 'auth/auth_repository.dart';
+import 'auth/config_servidor.dart';
 import 'auth/secure_token_storage.dart';
 import 'bloc/auth_bloc.dart';
 import 'bloc/auth_event.dart';
 import 'menu_mapas.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Dirección del servidor: en web se detecta sola; en móvil y escritorio es
+  // la que escribió el jugador la última vez (pantalla "Servidor").
+  final servidor = ConfigServidor(
+    urlInicial: apiUrlInicial,
+    almacen: AlmacenServidorSeguro(),
+  );
+  await servidor.cargar();
+
+  final api = AuthApi(baseUrl: servidor.url);
+  servidor.addListener(() => api.baseUrl = servidor.url);
+
   final repositorio = AuthRepository(
-    api: AuthApi(baseUrl: apiUrl),
+    api: api,
     almacen: SecureTokenStorage(),
   );
 
@@ -28,7 +40,7 @@ void main() {
           // menos de un minuto aunque no esté en el multijugador.
           verificarCada: const Duration(minutes: 1),
         )..add(AuthIniciada()),
-        child: const MyApp(home: AuthGate()),
+        child: MyApp(home: AuthGate(config: servidor)),
       ),
     ),
   );

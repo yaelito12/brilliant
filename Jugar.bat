@@ -39,6 +39,9 @@ if "%IPS%"=="" (
 ) else (
   echo   Desde otra PC ^(misma red Wi-Fi o cable^):
   for %%i in (%IPS%) do echo                      http://%%i:5000
+  echo.
+  echo   En la app de Android, en "Servidor", escribe:
+  for %%i in (%IPS%) do echo                      %%i:3000
 )
 echo ============================================================
 echo   La primera vez tarda un poco en compilar. El navegador se

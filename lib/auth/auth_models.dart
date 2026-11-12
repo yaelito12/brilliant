@@ -67,6 +67,14 @@ class AuthException implements Exception {
       campos = const {},
       reintentarEnSegundos = null;
 
+  /// Todavía no se eligió la dirección del servidor (pantalla "Servidor").
+  const AuthException.sinServidor()
+    : status = 0,
+      code = 'sin_servidor',
+      message = 'Falta la dirección del servidor.',
+      campos = const {},
+      reintentarEnSegundos = null;
+
   const AuthException.sesionExpirada()
     : status = 401,
       code = 'sesion_expirada',

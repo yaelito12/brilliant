@@ -7,18 +7,52 @@ import 'auth_models.dart';
 
 /// Cliente HTTP del servidor de autenticación (proyecto aparte `brilliant_server`).
 class AuthApi {
-  final String baseUrl;
   final Duration timeout;
   final http.Client _client;
+
+  String _baseUrl;
 
   AuthApi({
     required String baseUrl,
     http.Client? client,
     this.timeout = const Duration(seconds: 15),
-  }) : baseUrl = baseUrl.endsWith('/')
-           ? baseUrl.substring(0, baseUrl.length - 1)
-           : baseUrl,
+  }) : _baseUrl = _sinBarraFinal(baseUrl),
        _client = client ?? http.Client();
+
+  /// Dirección del servidor. Se puede cambiar en marcha: el jugador la escribe
+  /// en la pantalla "Servidor" (ver `ConfigServidor`).
+  String get baseUrl => _baseUrl;
+
+  set baseUrl(String url) => _baseUrl = _sinBarraFinal(url);
+
+  static String _sinBarraFinal(String url) =>
+      url.endsWith('/') ? url.substring(0, url.length - 1) : url;
+
+  /// Comprueba que en [baseUrl] haya un servidor de Brilliant escuchando
+  /// (`GET /health`). Lanza [AuthException] si no contesta o si contesta otra
+  /// cosa. Sirve para avisar en el momento de escribir la dirección, en vez de
+  /// fallar después al iniciar sesión.
+  static Future<void> comprobar(
+    String baseUrl, {
+    http.Client? client,
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    final api = AuthApi(baseUrl: baseUrl, client: client, timeout: timeout);
+    try {
+      final json = await api._enviar('GET', '/health');
+      if (json?['ok'] == true) return;
+    } on AuthException catch (e) {
+      // Sin conexión o sin dirección: ese error ya se explica solo.
+      if (e.code == 'sin_conexion' || e.code == 'sin_servidor') rethrow;
+    } finally {
+      if (client == null) api.close();
+    }
+    throw const AuthException(
+      status: 0,
+      code: 'no_es_brilliant',
+      message: 'Esa dirección contesta, pero no es el servidor de Brilliant.',
+    );
+  }
 
   Future<Sesion> registrar({
     required String nametag,
@@ -98,10 +132,13 @@ class AuthApi {
     Map<String, Object?>? cuerpo,
     String? token,
   }) async {
+    // Sin dirección no hay a dónde enviar nada (móvil recién instalado).
+    if (_baseUrl.isEmpty) throw const AuthException.sinServidor();
+
     final http.Response res;
     try {
       res = await Future<http.Response>(() async {
-        final req = http.Request(metodo, Uri.parse('$baseUrl$ruta'))
+        final req = http.Request(metodo, Uri.parse('$_baseUrl$ruta'))
           ..headers['Accept'] = 'application/json';
         if (cuerpo != null) {
           req.headers['Content-Type'] = 'application/json';

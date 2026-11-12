@@ -6,16 +6,23 @@ import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
 import 'auth_widgets.dart';
 import 'borrar_cuenta_dialog.dart';
+import 'config_servidor.dart';
+import 'servidor_page.dart';
 
-enum _Opcion { cerrarSesion, borrarCuenta }
+enum _Opcion { servidor, cerrarSesion, borrarCuenta }
 
 /// Botón de la barra superior: muestra quién ha entrado y permite
-/// cerrar sesión o borrar la cuenta.
+/// cambiar de servidor, cerrar sesión o borrar la cuenta.
 class MenuCuenta extends StatelessWidget {
-  const MenuCuenta({super.key});
+  /// Si el jugador puede elegir el servidor, el menú deja cambiarlo.
+  final ConfigServidor? config;
+
+  const MenuCuenta({super.key, this.config});
 
   @override
   Widget build(BuildContext context) {
+    final config = this.config;
+    final puedeElegirServidor = config != null && config.sePuedeCambiar;
     return BlocBuilder<AuthBloc, AuthState>(
       builder: (context, state) {
         final usuario = state.usuario;
@@ -24,6 +31,16 @@ class MenuCuenta extends StatelessWidget {
           icon: const Icon(Icons.account_circle),
           onSelected: (opcion) {
             switch (opcion) {
+              case _Opcion.servidor:
+                final bloc = context.read<AuthBloc>();
+                ServidorPage.abrir(
+                  context,
+                  config!,
+                  // La sesión era del servidor anterior: hay que volver a entrar.
+                  alCambiar: (_) => bloc.add(
+                    AuthSesionCerrada('Cambiaste de servidor. Vuelve a entrar.'),
+                  ),
+                );
               case _Opcion.cerrarSesion:
                 context.read<AuthBloc>().add(AuthLogoutSolicitado());
               case _Opcion.borrarCuenta:
@@ -63,6 +80,22 @@ class MenuCuenta extends StatelessWidget {
               ),
               const PopupMenuDivider(),
             ],
+            if (puedeElegirServidor)
+              PopupMenuItem<_Opcion>(
+                value: _Opcion.servidor,
+                child: Row(
+                  children: [
+                    const Icon(Icons.dns_outlined),
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Text(
+                        'Servidor: ${config.paraMostrar}',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const PopupMenuItem<_Opcion>(
               value: _Opcion.cerrarSesion,
               child: Row(

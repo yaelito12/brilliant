@@ -6,7 +6,6 @@ import '../fondo.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../auth/auth_config.dart';
 import '../auth/auth_models.dart'
     show mensajeSesionReemplazada, mensajeSesionVencida;
 import '../auth/auth_repository.dart';
@@ -43,14 +42,16 @@ class LobbyPage extends StatelessWidget {
   });
 
   /// Abre el lobby conectándose al servidor con la sesión actual.
+  /// [url] es la dirección del WebSocket (ver `wsUrlDesde`).
   static Route<void> ruta(
     AuthRepository repo, {
+    required Uri url,
     Nivel? nivelInicial,
     void Function(String mensaje)? alCerrarSesion,
   }) => MaterialPageRoute(
     builder: (_) => BlocProvider(
       create: (_) =>
-          LobbyBloc(ConexionMultijugador(url: wsUrl, token: repo.tokenDeAcceso))
+          LobbyBloc(ConexionMultijugador(url: url, token: repo.tokenDeAcceso))
             ..add(LobbyIniciado()),
       child: LobbyPage(
         nivelInicial: nivelInicial,
