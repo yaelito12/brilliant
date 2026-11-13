@@ -77,16 +77,18 @@ void main() {
     ]);
   });
 
-  test('listo, cambiar mapa y salir', () async {
+  test('listo, cambiar mapa, cambiar el tiempo y salir', () async {
     final ws = await conectado(sala: salaJson());
     expect(bloc.state.sala, isNotNull, reason: 'el autenticado ya traía la sala');
 
     bloc
       ..add(LobbyListo(true))
       ..add(LobbyElegirMapa(4))
+      ..add(LobbyElegirTiempo(60))
       ..add(LobbySalir());
     await pasa();
-    expect(ws.tipos.sublist(1), ['listo', 'elegir_mapa', 'salir']);
+    expect(ws.tipos.sublist(1), ['listo', 'elegir_mapa', 'elegir_tiempo', 'salir']);
+    expect(ws.enviados[3], {'tipo': 'elegir_tiempo', 'segundos': 60});
     expect(bloc.state.sala, isNull);
   });
 

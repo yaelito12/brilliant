@@ -33,6 +33,12 @@ class LobbyElegirMapa extends LobbyEvent {
   LobbyElegirMapa(this.nivel);
 }
 
+/// Solo el anfitrión: segundos por ronda, o 0 para jugar sin reloj.
+class LobbyElegirTiempo extends LobbyEvent {
+  final int segundos;
+  LobbyElegirTiempo(this.segundos);
+}
+
 class LobbyListo extends LobbyEvent {
   final bool listo;
   LobbyListo(this.listo);
@@ -186,6 +192,8 @@ class LobbyBloc extends Bloc<LobbyEvent, LobbyState> {
       esperar: true,
     ));
     on<LobbyElegirMapa>((e, emit) => _pedir(emit, {'tipo': 'elegir_mapa', 'nivel': e.nivel}));
+    on<LobbyElegirTiempo>((e, emit) =>
+        _pedir(emit, {'tipo': 'elegir_tiempo', 'segundos': e.segundos}));
     on<LobbyListo>((e, emit) => _pedir(emit, {'tipo': 'listo', 'listo': e.listo}));
     on<LobbySalir>(_alSalir);
     on<LobbyReconectar>((_, _) => conexion.reconectarAhora());

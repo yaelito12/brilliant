@@ -35,6 +35,10 @@ class SalaInfo {
   final String estado;
   final int minJugadores;
   final int maxJugadores;
+
+  /// Segundos que dura cada ronda, elegidos por el anfitrión. 0 = sin reloj:
+  /// la ronda dura hasta que todos jueguen o pasen.
+  final int segundosTurno;
   final List<JugadorEnSala> jugadores;
 
   const SalaInfo({
@@ -42,6 +46,7 @@ class SalaInfo {
     required this.estado,
     required this.minJugadores,
     required this.maxJugadores,
+    required this.segundosTurno,
     required this.jugadores,
   });
 
@@ -50,12 +55,16 @@ class SalaInfo {
     estado: j['estado'] as String,
     minJugadores: j['minJugadores'] as int,
     maxJugadores: j['maxJugadores'] as int,
+    segundosTurno: j['segundosTurno'] as int? ?? 0,
     jugadores: [
       for (final x in j['jugadores'] as List) JugadorEnSala.fromJson(x as Map<String, dynamic>),
     ],
   );
 
   bool get enLobby => estado == 'lobby';
+
+  /// La partida lleva reloj por ronda (lo eligió el anfitrión).
+  bool get conReloj => segundosTurno > 0;
   bool get jugando => estado == 'jugando';
   bool get llena => jugadores.length >= maxJugadores;
 
@@ -146,6 +155,11 @@ class PartidaInfo {
   /// Puntos con los que se gana (depende de cuántos jugadores empezaron).
   final int puntosMeta;
   final List<int>? dados;
+
+  /// Cuándo se acaba la ronda (o el tiempo para los iniciales), según el
+  /// reloj de este dispositivo. null = la partida va sin reloj (el anfitrión
+  /// eligió "sin reloj"): se espera a que todos jueguen o pasen.
+  final DateTime? limite;
   final List<JugadorPartidaInfo> jugadores;
 
   const PartidaInfo({
@@ -154,16 +168,24 @@ class PartidaInfo {
     required this.maxRondas,
     required this.puntosMeta,
     required this.dados,
+    required this.limite,
     required this.jugadores,
   });
 
-  factory PartidaInfo.fromJson(Map<String, dynamic> j) {
+  /// [recibido] es cuándo llegó el mensaje: el servidor manda los
+  /// milisegundos que faltan (no una hora) para no depender de que los
+  /// relojes estén sincronizados.
+  factory PartidaInfo.fromJson(Map<String, dynamic> j, {DateTime? recibido}) {
+    final ms = j['msRestantes'] as int?;
     return PartidaInfo(
       fase: j['fase'] as String,
       ronda: j['ronda'] as int,
       maxRondas: j['maxRondas'] as int,
       puntosMeta: j['puntosMeta'] as int,
       dados: (j['dados'] as List?)?.cast<int>(),
+      limite: ms == null
+          ? null
+          : (recibido ?? DateTime.now()).add(Duration(milliseconds: ms)),
       jugadores: [
         for (final x in j['jugadores'] as List)
           JugadorPartidaInfo.fromJson(x as Map<String, dynamic>),

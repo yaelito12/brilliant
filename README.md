@@ -130,9 +130,13 @@ Con la sesión iniciada, en el menú aparece **Jugar en línea**: se crea una sa
 un código de 6 letras). Todos juegan el mismo mapa: lo elige quien crea la sala, y solo esa
 persona lo puede cambiar. La partida empieza cuando todos (2 a 6) pulsan "Estoy listo". Si se corta la conexión, la app reconecta sola y vuelve a la sala.
 
+El anfitrión también elige el **tiempo por ronda**: "Sin reloj" (lo normal: la ronda sigue en
+cuanto todos juegan) o 30, 60, 90 o 120 segundos. Si lo cambia, todos vuelven a dar "listo".
+
 En la partida cada uno juega **su propio tablero con los mismos dados**: pone sus 6 números
-iniciales (se toca una casilla y luego el número) y en cada ronda coloca un número o pasa, sin reloj:
-la ronda sigue cuando todos jugaron. El marcador muestra los puntos
+iniciales (se toca una casilla y luego el número) y en cada ronda coloca un número o pasa. Si la
+sala juega con reloj, arriba se ve la cuenta atrás y a quien no juegue a tiempo se le pasa la
+ronda (para los números iniciales hay el doble de tiempo). El marcador muestra los puntos
 y qué está haciendo cada jugador; tocando a alguien se ve su tablero. Se puede **rendir** en
 cualquier momento. Al terminar aparecen los resultados y, si todos vuelven a pulsar "listo",
 empieza la revancha.
@@ -155,7 +159,7 @@ Detalles del protocolo en `../brilliant_server/MULTIJUGADOR.md`.
 ## Pruebas
 
 ```bash
-cd ../brilliant_server && dart test   # servidor (proyecto aparte): 77 pruebas
+cd ../brilliant_server && dart test   # servidor (proyecto aparte): 81 pruebas
 cd packages/brilliant_reglas && dart test   # reglas del juego: 12 pruebas
 flutter test              # app: incluye test/auth/
 ```

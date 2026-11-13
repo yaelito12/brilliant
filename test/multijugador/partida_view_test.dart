@@ -299,6 +299,19 @@ void main() {
       await cerrar(tester);
     });
 
+    testWidgets('sin reloj no hay cuenta atrás', (tester) async {
+      await enPartida(tester, partidaJson());
+      expect(find.byKey(const Key('cuenta-regresiva')), findsNothing);
+      await cerrar(tester);
+    });
+
+    testWidgets('muestra el tiempo que queda si la sala juega con reloj', (tester) async {
+      await enPartida(tester, partidaJson(msRestantes: 45000));
+      final texto = tester.widget<Text>(find.byKey(const Key('cuenta-regresiva'))).data!;
+      expect(texto, anyOf('0:45', '0:44'));
+      await cerrar(tester);
+    });
+
     testWidgets('rendirse pide confirmar y manda conceder', (tester) async {
       final ws = await enPartida(tester, partidaJson());
       await tester.ensureVisible(find.byKey(const Key('rendirse')));

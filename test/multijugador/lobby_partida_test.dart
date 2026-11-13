@@ -49,6 +49,23 @@ void main() {
       expect(p.jugador('u2')!.activo, isFalse);
       expect(p.faltan, 1, reason: 'solo Carla: Ana ya jugó y Beto se rindió');
     });
+
+    test('PartidaInfo sin reloj no trae límite; con reloj lo calcula', () {
+      expect(PartidaInfo.fromJson(partidaJson()).limite, isNull);
+      final ahora = DateTime(2026, 1, 1, 12);
+      final p = PartidaInfo.fromJson(
+        partidaJson(msRestantes: 30000),
+        recibido: ahora,
+      );
+      expect(p.limite, ahora.add(const Duration(seconds: 30)));
+    });
+
+    test('SalaInfo lee el tiempo por ronda que eligió el anfitrión', () {
+      expect(SalaInfo.fromJson(salaJson()).conReloj, isFalse);
+      final sala = SalaInfo.fromJson(salaJson(segundosTurno: 60));
+      expect(sala.segundosTurno, 60);
+      expect(sala.conReloj, isTrue);
+    });
   });
 
   group('mensajes que manda la app', () {

@@ -94,10 +94,12 @@ ConexionMultijugador conexionFalsa(
 Map<String, Object?> salaJson({
   String codigo = 'K7M2QX',
   String estado = 'lobby',
+  int segundosTurno = 0,
   List<Map<String, Object?>>? jugadores,
 }) => {
   'codigo': codigo,
   'estado': estado,
+  'segundosTurno': segundosTurno,
   'minJugadores': 2,
   'maxJugadores': 6,
   'jugadores': jugadores ??
@@ -144,6 +146,7 @@ Map<String, Object?> partidaJson({
   String fase = 'jugando',
   int ronda = 1,
   List<int>? dados = const [1, 3],
+  int? msRestantes,
   List<Map<String, Object?>>? jugadores,
 }) => {
   'fase': fase,
@@ -151,7 +154,7 @@ Map<String, Object?> partidaJson({
   'maxRondas': 100,
   'puntosMeta': 26,
   'dados': fase == 'iniciales' ? null : dados,
-  'msRestantes': null,
+  'msRestantes': msRestantes,
   'jugadores': jugadores ??
       [
         jugadorPartidaJson('u1', 'Ana', celdas: fase == 'iniciales' ? [] : iniciales1),

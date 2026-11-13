@@ -454,6 +454,55 @@ class SelectorMapa extends StatelessWidget {
   }
 }
 
+/// Opciones de tiempo por ronda que puede elegir el anfitrión (0 = sin reloj).
+const opcionesSegundosRonda = [0, 30, 60, 90, 120];
+
+/// Cómo se lee un tiempo por ronda en la pantalla.
+String etiquetaTiempo(int segundos) =>
+    segundos <= 0 ? 'Sin reloj' : '$segundos s';
+
+/// Qué significa jugar con ese tiempo (o sin reloj).
+String descripcionTiempo(int segundos) => segundos <= 0
+    ? 'Sin reloj: cada ronda sigue en cuanto todos juegan o pasan. Nadie corre.'
+    : 'Con reloj: a quien no juegue en $segundos s se le pasa la ronda. Para '
+          'poner los números iniciales hay el doble (${segundos * 2} s).';
+
+/// Opciones de tiempo por ronda, para el anfitrión. Si la sala trae un tiempo
+/// que no está en la lista (configurado en el servidor), se muestra también.
+class SelectorTiempo extends StatelessWidget {
+  final int elegido;
+  final ValueChanged<int>? onElegir;
+  const SelectorTiempo({super.key, required this.elegido, required this.onElegir});
+
+  @override
+  Widget build(BuildContext context) {
+    final opciones = {...opcionesSegundosRonda, elegido}.toList()..sort();
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final s in opciones)
+          ChoiceChip(
+            key: Key('tiempo-$s'),
+            label: Text(etiquetaTiempo(s)),
+            selected: s == elegido,
+            onSelected: onElegir == null ? null : (_) => onElegir!(s),
+            avatar: s == elegido
+                ? null
+                : Icon(s <= 0 ? Icons.timer_off : Icons.timer, size: 18),
+            selectedColor: Colors.teal.shade100,
+            backgroundColor: Colors.white,
+            labelStyle: TextStyle(
+              fontWeight: s == elegido ? FontWeight.bold : FontWeight.normal,
+              color: _colorTexto,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _EnSala extends StatelessWidget {
   final LobbyState state;
   const _EnSala({required this.state});
@@ -543,6 +592,48 @@ class _EnSala extends StatelessWidget {
           const SizedBox(height: 10),
           Center(child: _MapaDeSala(numero: sala.nivel!)),
         ],
+        const SizedBox(height: 20),
+        const _Titulo('Tiempo por ronda'),
+        const SizedBox(height: 4),
+        Text(
+          soyAnfitrion
+              ? 'Tú eliges si la partida lleva reloj. Si lo cambias, todos '
+                    'tienen que volver a dar "listo".'
+              : 'El anfitrión elige si la partida lleva reloj.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+        ),
+        const SizedBox(height: 10),
+        if (soyAnfitrion)
+          SelectorTiempo(
+            elegido: sala.segundosTurno,
+            onElegir: state.conectado
+                ? (s) => bloc.add(LobbyElegirTiempo(s))
+                : null,
+          )
+        else
+          Center(
+            child: Chip(
+              avatar: Icon(
+                sala.conReloj ? Icons.timer : Icons.timer_off,
+                size: 18,
+                color: Colors.teal.shade700,
+              ),
+              label: Text(
+                etiquetaTiempo(sala.segundosTurno),
+                key: const Key('tiempo-sala'),
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              backgroundColor: Colors.white,
+            ),
+          ),
+        const SizedBox(height: 6),
+        Text(
+          descripcionTiempo(sala.segundosTurno),
+          key: const Key('tiempo-explicacion'),
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+        ),
         const SizedBox(height: 24),
         Center(
           child: SizedBox(

@@ -116,6 +116,64 @@ void main() {
     await cerrar(tester);
   });
 
+  testWidgets('el anfitrión elige el tiempo por ronda', (tester) async {
+    final ws = await abrirLobby(tester, sala: salaConBeto());
+    // Por defecto la sala va sin reloj.
+    expect(find.byType(SelectorTiempo), findsOneWidget);
+    expect(
+      tester.widget<ChoiceChip>(find.byKey(const Key('tiempo-0'))).selected,
+      isTrue,
+    );
+    expect(
+      tester.widget<Text>(find.byKey(const Key('tiempo-explicacion'))).data,
+      contains('Sin reloj'),
+    );
+
+    final sesenta = find.byKey(const Key('tiempo-60'));
+    await tester.ensureVisible(sesenta);
+    await tester.tap(sesenta);
+    await tester.pump();
+    expect(ws.enviados.last, {'tipo': 'elegir_tiempo', 'segundos': 60});
+
+    // El servidor confirma: queda elegido y se explica qué pasa con el reloj.
+    await servidorDice(tester, ws, {
+      'tipo': 'sala',
+      'sala': salaJson(segundosTurno: 60, jugadores: [
+        jugadorJson('u1', 'Ana'),
+        jugadorJson('u2', 'Beto', nivel: 3),
+      ]),
+    });
+    expect(tester.widget<ChoiceChip>(sesenta).selected, isTrue);
+    final explicacion =
+        tester.widget<Text>(find.byKey(const Key('tiempo-explicacion'))).data!;
+    expect(explicacion, contains('60 s'));
+    expect(explicacion, contains('120 s'), reason: 'el doble para los iniciales');
+    await cerrar(tester);
+  });
+
+  testWidgets('si no soy el anfitrión solo veo el tiempo que eligió', (tester) async {
+    final ws = await abrirLobby(tester, sala: salaJson(segundosTurno: 90, jugadores: [
+      jugadorJson('u2', 'Beto', nivel: 3),
+      jugadorJson('u1', 'Ana', nivel: 3),
+    ]));
+    expect(find.byType(SelectorTiempo), findsNothing);
+    expect(tester.widget<Text>(find.byKey(const Key('tiempo-sala'))).data, '90 s');
+
+    // El anfitrión lo apaga: se ve "Sin reloj".
+    await servidorDice(tester, ws, {
+      'tipo': 'sala',
+      'sala': salaJson(jugadores: [
+        jugadorJson('u2', 'Beto', nivel: 3),
+        jugadorJson('u1', 'Ana', nivel: 3),
+      ]),
+    });
+    expect(
+      tester.widget<Text>(find.byKey(const Key('tiempo-sala'))).data,
+      'Sin reloj',
+    );
+    await cerrar(tester);
+  });
+
   testWidgets('avisos de lo que hacen los demás', (tester) async {
     final ws = await abrirLobby(tester, sala: salaConBeto());
     await servidorDice(tester, ws, {
