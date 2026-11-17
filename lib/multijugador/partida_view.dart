@@ -16,6 +16,8 @@ import 'modelos.dart';
 /// el anfitrión eligió jugar con reloj), los botones de pasar y rendirse y el
 /// marcador de todos.
 ///
+/// En el tablero de un rival solo se mira: ahí no se puede jugar.
+///
 /// La app solo propone jugadas: el servidor las valida y manda el estado
 /// nuevo. Lo único local es el ancla elegida y los números iniciales que se
 /// están escribiendo.
@@ -39,17 +41,56 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
   /// Casilla inicial que el jugador tocó (null = ninguna).
   Coordenada? _casillaElegida;
 
+  /// Jugador cuyo tablero estoy mirando, elegido en el marcador
+  /// (null o mi id = el mío).
+  String? _viendoId;
+
   PartidaInfo get _partida => widget.state.partida!;
   JugadorPartidaInfo? get _yo => widget.state.yoEnPartida;
+
+  /// Rival cuyo tablero estoy mirando (null = estoy en el mío). Si se fue de
+  /// la partida o no se sabe su mapa, se vuelve al mío solo.
+  JugadorPartidaInfo? get _otroVisto {
+    final id = _viendoId;
+    if (id == null || id == _yo?.id) return null;
+    final j = _partida.jugador(id);
+    return j?.mapa == null ? null : j;
+  }
+
+  /// En el teléfono el marcador va debajo del tablero: al elegir a alguien
+  /// ahí hay que subir, o el tablero nuevo se quedaría fuera de la pantalla.
+  final ScrollController _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _volverAMiTablero() => setState(() => _viendoId = null);
+
+  /// Muestra el tablero de [j]; si ya era el que se veía, vuelve al mío.
+  void _verTableroDe(JugadorPartidaInfo j, {required String viendoId}) {
+    setState(() => _viendoId = j.id == viendoId ? null : j.id);
+    if (_scroll.hasClients) {
+      _scroll.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
 
   @override
   void didUpdateWidget(PartidaMultijugadorView viejo) {
     super.didUpdateWidget(viejo);
     final antes = viejo.state.partida;
-    // Ronda nueva (dados nuevos): el ancla de la ronda anterior ya no sirve.
+    // Ronda nueva (dados nuevos): el ancla de la ronda anterior ya no sirve
+    // y, si estaba mirando a un rival, vuelvo a mi tablero para jugar.
     if (antes?.ronda != _partida.ronda || antes?.fase != _partida.fase) {
       _ancla = null;
       _valorElegido = null;
+      _viendoId = null;
     }
   }
 
@@ -68,14 +109,18 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
   @override
   Widget build(BuildContext context) {
     final yo = _yo;
-    // Solo se ve el tablero propio: el de los demás no se muestra.
-    final viendo = yo;
-    if (viendo == null || viendo.mapa == null) {
+    if (yo == null || yo.mapa == null) {
       return const Center(child: Text('Ya no participas en esta partida.'));
     }
+    // El tablero que se está mirando: el mío o el del rival que elegí en el
+    // marcador. En el del rival solo se mira.
+    final otro = _otroVisto;
+    final viendo = otro ?? yo;
+    final esMio = otro == null;
+    final misIniciales = esMio && _poniendoIniciales;
 
     final tablero = viendo.tablero();
-    final celdas = viendo.id == yo?.id && _partida.enIniciales && !viendo.yaJugo
+    final celdas = esMio && _partida.enIniciales && !viendo.yaJugo
         ? {...viendo.celdas, ..._iniciales}
         : viendo.celdas;
     final jugadas = _jugadasPosibles(tablero, celdas);
@@ -85,30 +130,39 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
       tablero: tablero,
       celdas: celdas,
       iniciales: viendo.mapa!.casillasIniciales,
-      pendientesIniciales: _poniendoIniciales
+      pendientesIniciales: misIniciales
           ? viendo.mapa!.casillasIniciales
                 .where((c) => !_iniciales.containsKey(c))
                 .toSet()
           : const {},
-      seleccionada: _casillaActiva(viendo.mapa!),
-      sinSalida: _poniendoIniciales
+      seleccionada: esMio ? _casillaActiva(viendo.mapa!) : null,
+      sinSalida: misIniciales
           ? inicialesSinSalida(viendo.mapa!, _iniciales).toSet()
           : const {},
       anclas: jugadas.anclas,
-      ancla: _ancla,
+      ancla: esMio ? _ancla : null,
       destinos: jugadas.destinos,
       destinosTentativos: jugadas.tentativos,
       lugares: viendo.lugares,
       lugaresOcupados: _partida.lugaresOcupados,
-      onTap: _puedoJugar ? (c) => _tocar(context, c, viendo, tablero) : null,
+      onTap: esMio && _puedoJugar
+          ? (c) => _tocar(context, c, yo, tablero)
+          : null,
     );
-    final panel = _panel(context, viendo, jugadas.anclas);
+    // Encima del tablero, de quién es (solo cuando no es el mío).
+    final encabezado = switch (otro) {
+      final o? => BarraTableroRival(jugador: o, onVolver: _volverAMiTablero),
+      null => null,
+    };
+    final panel = _panel(context, otro, jugadas.anclas);
     final marcador = Marcador(
       partida: _partida,
-      yoId: viendo.id,
+      yoId: yo.id,
+      viendoId: viendo.id,
+      onVer: (j) => _verTableroDe(j, viendoId: viendo.id),
     );
 
-    final nivel = viendo.mapa!;
+    final nivel = yo.mapa!;
     final leyenda = LeyendaChips(tablero: tablero);
 
     // El mismo contenido en el mismo orden en las dos formas de la pantalla
@@ -126,7 +180,15 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Center(child: vistaTablero),
+                    child: Column(
+                      children: [
+                        if (encabezado != null) ...[
+                          encabezado,
+                          const SizedBox(height: 10),
+                        ],
+                        Expanded(child: Center(child: vistaTablero)),
+                      ],
+                    ),
                   ),
                 ),
                 SizedBox(
@@ -148,12 +210,17 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
             );
           }
           return SingleChildScrollView(
+            controller: _scroll,
             padding: const EdgeInsets.all(12),
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 600),
                 child: Column(
                   children: [
+                    if (encabezado != null) ...[
+                      encabezado,
+                      const SizedBox(height: 10),
+                    ],
                     vistaTablero,
                     const SizedBox(height: 12),
                     panel,
@@ -178,7 +245,11 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
   })
   _jugadasPosibles(Tablero tablero, Map<Coordenada, int> celdas) {
     final dados = _partida.dados;
-    if (!_puedoJugar || !_partida.jugando || dados == null) {
+    // En el tablero de un rival no se marca nada: ahí no se puede jugar.
+    if (_otroVisto != null ||
+        !_puedoJugar ||
+        !_partida.jugando ||
+        dados == null) {
       return (anclas: const {}, destinos: const {}, tentativos: const {});
     }
     final anclas = anclasPosibles(tablero, celdas, dados);
@@ -373,34 +444,41 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
     return KeyEventResult.ignored;
   }
 
+  /// Panel de la ronda, los dados y los botones. Siempre habla de mi partida:
+  /// [otro] solo dice de quién es el tablero que estoy mirando (null = el
+  /// mío), para avisarlo y poder volver al mío.
   Widget _panel(
     BuildContext context,
-    JugadorPartidaInfo viendo,
+    JugadorPartidaInfo? otro,
     Set<Coordenada> anclas,
   ) {
     final bloc = context.read<LobbyBloc>();
-    final yo = _yo;
+    final yo = _yo!;
     final p = _partida;
     final dados = p.dados;
-    final esMio = viendo.id == yo?.id;
+    final esMio = otro == null;
 
     final String mensaje;
-    if (p.terminada) {
+    if (otro != null) {
+      mensaje =
+          'Estás viendo el tablero de ${otro.nametag}. '
+          'Vuelve al tuyo para jugar.';
+    } else if (p.terminada) {
       mensaje = 'La partida terminó.';
-    } else if (!(yo?.activo ?? false)) {
-      mensaje = yo?.estado == 'concedio'
+    } else if (!yo.activo) {
+      mensaje = yo.estado == 'concedio'
           ? 'Te rendiste. Sigues viendo la partida.'
           : 'Ya no participas en esta partida.';
     } else if (p.enIniciales) {
-      final faltan = viendo.mapa!.casillasIniciales.length - _iniciales.length;
-      mensaje = yo!.yaJugo
+      final faltan = yo.mapa!.casillasIniciales.length - _iniciales.length;
+      mensaje = yo.yaJugo
           ? 'Listo. Esperando a que los demás pongan sus números…'
           : faltan > 0
           ? _casillaElegida == null
                 ? 'Toca una casilla inicial y luego un número (del 1 al 6, sin repetir). Faltan $faltan.'
                 : 'Toca un número para la casilla marcada (del 1 al 6, sin repetir). Faltan $faltan.'
           : 'Revisa tus números y pulsa Confirmar.';
-    } else if (yo!.completo) {
+    } else if (yo.completo) {
       mensaje =
           '¡Completaste tu tablero! La partida termina al acabar esta ronda.';
     } else if (yo.yaJugo) {
@@ -415,20 +493,20 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
           : 'Toca un ${dados![0]} o un ${dados[1]} de tu tablero como ancla.';
     } else {
       mensaje =
-          'Coloca el ${otroDado(dados!, viendo.celdas[_ancla]!)} en una casilla marcada.';
+          'Coloca el ${otroDado(dados!, yo.celdas[_ancla]!)} en una casilla marcada.';
     }
 
     final inicialesListos =
         esMio &&
         p.enIniciales &&
         _puedoJugar &&
-        errorEnValoresIniciales(viendo.mapa!, _iniciales) == null;
+        errorEnValoresIniciales(yo.mapa!, _iniciales) == null;
 
     // Quién se salió del juego y se está esperando (yo no: para mí ya está
     // la barra de "reconectando" arriba de la pantalla).
     final desconectados = [
       for (final j in p.jugadores)
-        if (j.activo && !j.conectado && !j.completo && j.id != yo?.id)
+        if (j.activo && !j.conectado && !j.completo && j.id != yo.id)
           j.nametag,
     ];
 
@@ -478,10 +556,10 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
                 valorAncla: !esMio
                     ? null
                     : _ancla != null
-                    ? viendo.celdas[_ancla]
+                    ? yo.celdas[_ancla]
                     : _valorElegido,
                 apagados: esMio && _puedoJugar && anclas.isEmpty,
-                onElegir: esMio && _puedoJugar && !(yo?.yaJugo ?? true)
+                onElegir: esMio && _puedoJugar && !yo.yaJugo
                     ? _elegirDado
                     : null,
               ),
@@ -504,24 +582,34 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
                 ),
               ),
             const SizedBox(height: 10),
-            ...[
+            // Mirando el tablero de un rival solo se ofrece volver al mío:
+            // los números y los botones de jugar son de mi tablero.
+            if (otro != null)
+              FilledButton.icon(
+                key: const Key('volver-a-mi-tablero'),
+                onPressed: _volverAMiTablero,
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.teal.shade700,
+                ),
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Volver a mi tablero'),
+              )
+            else ...[
               if (_poniendoIniciales) ...[
-                ..._avisosIniciales(viendo.mapa!),
+                ..._avisosIniciales(yo.mapa!),
                 TecladoIniciales(
-                  permitidos: switch (_casillaActiva(viendo.mapa!)) {
-                    final c? => _permitidos(viendo.mapa!, c),
+                  permitidos: switch (_casillaActiva(yo.mapa!)) {
+                    final c? => _permitidos(yo.mapa!, c),
                     null => const {},
                   },
-                  hayElegida: _iniciales.containsKey(
-                    _casillaActiva(viendo.mapa!),
-                  ),
-                  onNumero: (n) => _poner(viendo.mapa!, n),
-                  onBorrar: () => _borrar(viendo.mapa!),
-                  onAlAzar: () => _alAzar(viendo.mapa!),
+                  hayElegida: _iniciales.containsKey(_casillaActiva(yo.mapa!)),
+                  onNumero: (n) => _poner(yo.mapa!, n),
+                  onBorrar: () => _borrar(yo.mapa!),
+                  onAlAzar: () => _alAzar(yo.mapa!),
                 ),
                 const SizedBox(height: 10),
               ],
-              if (p.enIniciales && !(yo?.yaJugo ?? true))
+              if (p.enIniciales && !yo.yaJugo)
                 FilledButton.icon(
                   key: const Key('confirmar-iniciales'),
                   onPressed: inicialesListos
@@ -541,7 +629,7 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
                   icon: const Icon(Icons.skip_next),
                   label: const Text('Pasar ronda'),
                 ),
-              if ((yo?.activo ?? false) && !p.terminada) ...[
+              if (yo.activo && !p.terminada) ...[
                 const SizedBox(height: 6),
                 TextButton.icon(
                   key: const Key('rendirse'),
@@ -703,12 +791,26 @@ class DadosRonda extends StatelessWidget {
 }
 
 /// Marcador: todos los jugadores ordenados por puntos, con lo que está
-/// haciendo cada uno. El tablero de los demás no se puede ver.
+/// haciendo cada uno. Al tocar uno se ve su tablero ([onVer]); el que se está
+/// viendo ([viendoId]) queda resaltado.
 class Marcador extends StatelessWidget {
   final PartidaInfo partida;
   final String? yoId;
 
-  const Marcador({super.key, required this.partida, required this.yoId});
+  /// Jugador cuyo tablero se está viendo ahora.
+  final String? viendoId;
+
+  /// Se llama al tocar un jugador, para ver su tablero. Null = no se puede
+  /// cambiar de tablero.
+  final void Function(JugadorPartidaInfo jugador)? onVer;
+
+  const Marcador({
+    super.key,
+    required this.partida,
+    required this.yoId,
+    this.viendoId,
+    this.onVer,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -725,7 +827,7 @@ class Marcador extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Padding(
-            padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 2),
             child: Text(
               'Marcador',
               style: TextStyle(
@@ -734,10 +836,23 @@ class Marcador extends StatelessWidget {
               ),
             ),
           ),
+          if (onVer != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Text(
+                'Toca a un jugador para ver su tablero',
+                key: const Key('pista-ver-tablero'),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
+            ),
           for (final j in orden)
             ListTile(
               key: Key('marcador-${j.nametag}'),
               dense: true,
+              selected: j.id == viendoId,
+              selectedTileColor: Colors.teal.shade50,
+              selectedColor: colorTextoTablero,
+              onTap: onVer == null || j.mapa == null ? null : () => onVer!(j),
               leading: CircleAvatar(
                 radius: 16,
                 backgroundColor: j.activo && j.conectado
@@ -755,6 +870,14 @@ class Marcador extends StatelessWidget {
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (j.id == viendoId) ...[
+                    Icon(
+                      Icons.visibility,
+                      size: 18,
+                      color: Colors.teal.shade700,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   _icono(j),
                   const SizedBox(width: 8),
                   Text(
@@ -793,6 +916,56 @@ class Marcador extends StatelessWidget {
       _ => (Icons.hourglass_top, Colors.blueGrey),
     };
     return Icon(icono, color: color, size: 20);
+  }
+}
+
+/// Barra sobre el tablero mientras estoy viendo el de otro jugador: de quién
+/// es, con qué mapa juega y cuántos puntos lleva, y el botón para volver al
+/// mío. Así nunca se confunde el tablero del rival con el propio.
+class BarraTableroRival extends StatelessWidget {
+  final JugadorPartidaInfo jugador;
+  final VoidCallback onVolver;
+
+  const BarraTableroRival({
+    super.key,
+    required this.jugador,
+    required this.onVolver,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('barra-tablero-rival'),
+      padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+      decoration: BoxDecoration(
+        color: Colors.teal.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.teal.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.visibility, size: 20, color: Colors.teal.shade800),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Tablero de ${jugador.nametag} · mapa ${jugador.nivel} · '
+              '${jugador.puntos} pts',
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                color: Colors.teal.shade900,
+              ),
+            ),
+          ),
+          TextButton.icon(
+            key: const Key('volver-mi-tablero-barra'),
+            onPressed: onVolver,
+            icon: const Icon(Icons.arrow_back, size: 18),
+            label: const Text('Mi tablero'),
+          ),
+        ],
+      ),
+    );
   }
 }
 

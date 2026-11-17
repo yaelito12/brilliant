@@ -137,7 +137,8 @@ En la partida cada uno juega **su propio tablero con los mismos dados**: pone su
 iniciales (se toca una casilla y luego el número) y en cada ronda coloca un número o pasa. Si la
 sala juega con reloj, arriba se ve la cuenta atrás y a quien no juegue a tiempo se le pasa la
 ronda (para los números iniciales hay el doble de tiempo). El marcador muestra los puntos
-y qué está haciendo cada jugador; tocando a alguien se ve su tablero. Se puede **rendir** en
+y qué está haciendo cada jugador; tocando a alguien se ve su tablero (solo para mirar: ahí no
+se juega, y con "Volver a mi tablero" se regresa al propio). Se puede **rendir** en
 cualquier momento. Al terminar aparecen los resultados y, si todos vuelven a pulsar "listo",
 empieza la revancha.
 

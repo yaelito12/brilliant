@@ -142,6 +142,9 @@ Map<String, Object?> jugadorPartidaJson(
 /// Iniciales válidos del nivel 1.
 const iniciales1 = [[0, 2, 1], [1, 5, 2], [3, 1, 3], [3, 4, 4], [5, 2, 5], [6, 4, 6]];
 
+/// Iniciales del nivel 3 (el mapa de Beto en las pruebas).
+const iniciales3 = [[1, 2, 1], [1, 5, 2], [3, 3, 3], [4, 1, 4], [4, 6, 5], [6, 2, 6]];
+
 Map<String, Object?> partidaJson({
   String fase = 'jugando',
   int ronda = 1,

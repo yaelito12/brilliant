@@ -1,5 +1,6 @@
 import 'package:brilliant/multijugador/partida_view.dart';
-import 'package:brilliant/tablero_ui.dart' show CeldaTablero, DadoAnimado;
+import 'package:brilliant/tablero_ui.dart'
+    show CeldaTablero, DadoAnimado, TableroMultijugador;
 import 'package:brilliant_reglas/brilliant_reglas.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
@@ -336,7 +337,7 @@ void main() {
   });
 
   group('marcador', () {
-    testWidgets('ordena por puntos y no deja ver el tablero de otro', (tester) async {
+    testWidgets('ordena por puntos', (tester) async {
       await enPartida(tester, partidaJson(jugadores: [
         jugadorPartidaJson('u1', 'Ana', puntos: 4, celdas: iniciales1),
         jugadorPartidaJson('u2', 'Beto', nivel: 3, puntos: 11, conectado: false),
@@ -349,13 +350,126 @@ void main() {
       expect(orden, ['marcador-Beto', 'marcador-Ana', 'marcador-Carla'],
           reason: 'los que se rinden van al final aunque tengan más puntos');
       expect(find.textContaining('sin conexión'), findsOneWidget);
+      await cerrar(tester);
+    });
+  });
 
-      await tester.ensureVisible(find.byKey(const Key('marcador-Beto')));
-      await tester.tap(find.byKey(const Key('marcador-Beto')));
+  group('ver el tablero de un rival', () {
+    /// La partida de Ana (nivel 1) contra Beto (nivel 3, con sus números).
+    Map<String, Object?> conBeto({int ronda = 1}) => partidaJson(
+      ronda: ronda,
+      dados: [1, 3],
+      jugadores: [
+        jugadorPartidaJson('u1', 'Ana', celdas: iniciales1),
+        jugadorPartidaJson('u2', 'Beto',
+            nivel: 3, puntos: 11, celdas: iniciales3, lugares: {'mo1': 1}),
+      ],
+    );
+
+    /// Tablero que se está viendo ahora.
+    TableroMultijugador vista(WidgetTester tester) =>
+        tester.widget<TableroMultijugador>(find.byType(TableroMultijugador));
+
+    Future<void> tocarEnMarcador(WidgetTester tester, String nametag) async {
+      final f = find.byKey(Key('marcador-$nametag'));
+      await tester.ensureVisible(f);
+      await tester.tap(f);
       await avanzar(tester);
-      expect(mensaje(tester), startsWith('Toca'), reason: 'sigue en su propio tablero');
+    }
+
+    final barra = find.byKey(const Key('barra-tablero-rival'));
+
+    testWidgets('tocarlo en el marcador muestra su mapa y sus números', (tester) async {
+      final ws = await enPartida(tester, conBeto());
+      expect(barra, findsNothing, reason: 'empiezo en mi tablero');
+      expect(vista(tester).nivel.numero, 1);
+      expect(find.byKey(const Key('pista-ver-tablero')), findsOneWidget);
+
+      await tocarEnMarcador(tester, 'Beto');
+
+      expect(vista(tester).nivel.numero, 3, reason: 'el mapa de Beto');
+      expect(vista(tester).celdas[const Coordenada(4, 1)], 4,
+          reason: 'sus números, no los míos');
+      expect(vista(tester).lugares, {'mo1': 1}, reason: 'sus zonas completas');
+      expect(barra, findsOneWidget);
+      expect(find.textContaining('Tablero de Beto'), findsOneWidget);
+      expect(find.textContaining('11 pts'), findsOneWidget);
+      expect(mensaje(tester), contains('Estás viendo el tablero de Beto'));
+
+      // Solo se mira: ni jugadas marcadas ni botones de jugar.
+      expect(vista(tester).anclas, isEmpty);
+      expect(vista(tester).onTap, isNull);
+      expect(find.byKey(const Key('pasar')), findsNothing);
+      await tester.tap(celda(1, 2)); // una casilla suya
+      await avanzar(tester);
+      expect(ws.tipos, isNot(contains('jugada')));
+
+      // Y se vuelve al propio, donde sí se juega.
+      await tester.ensureVisible(find.byKey(const Key('volver-a-mi-tablero')));
+      await tester.tap(find.byKey(const Key('volver-a-mi-tablero')));
+      await avanzar(tester);
+      expect(vista(tester).nivel.numero, 1);
+      expect(barra, findsNothing);
       expect(find.byKey(const Key('pasar')), findsOneWidget);
-      expect(find.textContaining('Estás viendo'), findsNothing);
+      expect(mensaje(tester), startsWith('Toca'));
+      await cerrar(tester);
+    });
+
+    testWidgets('tocar al mismo (o a mí) vuelve a mi tablero', (tester) async {
+      await enPartida(tester, conBeto());
+      await tocarEnMarcador(tester, 'Beto');
+      expect(barra, findsOneWidget);
+      await tocarEnMarcador(tester, 'Beto');
+      expect(barra, findsNothing, reason: 'tocarlo otra vez lo suelta');
+
+      await tocarEnMarcador(tester, 'Beto');
+      await tocarEnMarcador(tester, 'Ana');
+      expect(barra, findsNothing, reason: 'tocarme a mí me devuelve a mi tablero');
+      await cerrar(tester);
+    });
+
+    testWidgets('al empezar la ronda siguiente vuelve a mi tablero', (tester) async {
+      final ws = await enPartida(tester, conBeto());
+      await tocarEnMarcador(tester, 'Beto');
+      expect(barra, findsOneWidget);
+
+      await servidorDice(tester, ws, {'tipo': 'partida', 'partida': conBeto(ronda: 2)});
+      expect(barra, findsNothing, reason: 'toca jugar: de vuelta a mi tablero');
+      expect(vista(tester).nivel.numero, 1);
+      await cerrar(tester);
+    });
+
+    testWidgets('también mientras pongo mis números iniciales', (tester) async {
+      await enPartida(tester, partidaJson(fase: 'iniciales', ronda: 0, jugadores: [
+        jugadorPartidaJson('u1', 'Ana'),
+        jugadorPartidaJson('u2', 'Beto', nivel: 3, yaJugo: true, celdas: iniciales3),
+      ]));
+      await tester.tap(celda(0, 2));
+      await avanzar(tester);
+      await tester.tap(find.byKey(const Key('tecla-1')));
+      await avanzar(tester);
+
+      await tocarEnMarcador(tester, 'Beto');
+      expect(vista(tester).nivel.numero, 3);
+      expect(vista(tester).seleccionada, isNull);
+      expect(vista(tester).pendientesIniciales, isEmpty,
+          reason: 'sus casillas vacías no son mis pendientes');
+      expect(find.byKey(const Key('tecla-1')), findsNothing,
+          reason: 'sin teclado: no es mi tablero');
+
+      // Al volver sigue mi número puesto.
+      await tester.tap(find.byKey(const Key('volver-a-mi-tablero')));
+      await avanzar(tester);
+      expect(vista(tester).celdas[const Coordenada(0, 2)], 1);
+      expect(mensaje(tester), contains('Faltan 5'));
+      await cerrar(tester);
+    });
+
+    testWidgets('sin desbordes en un teléfono', (tester) async {
+      await enPartida(tester, conBeto(), tamano: pantallaAngosta);
+      await tocarEnMarcador(tester, 'Beto');
+      expect(barra, findsOneWidget);
+      expect(tester.takeException(), isNull);
       await cerrar(tester);
     });
   });
