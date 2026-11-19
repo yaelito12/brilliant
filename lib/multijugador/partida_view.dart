@@ -166,20 +166,28 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
     final leyenda = LeyendaChips(tablero: tablero);
 
     // El mismo contenido en el mismo orden en las dos formas de la pantalla
-    // (tablero, panel, marcador y leyenda): en la computadora el panel va a
-    // la derecha del tablero y en el teléfono debajo, como en la partida de
-    // un jugador.
+    // (tablero, panel, marcador y leyenda): en la computadora y en el
+    // teléfono acostado el panel va a la derecha del tablero, y en el
+    // teléfono parado debajo, como en la partida de un jugador.
     return Focus(
       autofocus: true,
       onKeyEvent: (_, e) => _alPulsarTecla(e, nivel),
       child: LayoutBuilder(
         builder: (context, c) {
-          if (c.maxWidth >= anchoPantallaAncha) {
+          if (panelAlLado(c)) {
+            // Con el teléfono acostado el panel se achica (y los márgenes
+            // también) para que al tablero le quede alto y ancho; en
+            // pantallas anchas son los 360 y los 16 de siempre.
+            final acostado = c.maxWidth < anchoPantallaAncha;
+            final anchoPanel = acostado
+                ? min(360.0, max(240.0, c.maxWidth - 420))
+                : 360.0;
+            final margen = acostado ? 8.0 : 16.0;
             return Row(
               children: [
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: EdgeInsets.all(margen),
                     child: Column(
                       children: [
                         if (encabezado != null) ...[
@@ -192,9 +200,9 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
                   ),
                 ),
                 SizedBox(
-                  width: 360,
+                  width: anchoPanel,
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(0, 16, 16, 16),
+                    padding: EdgeInsets.fromLTRB(0, margen, margen, margen),
                     child: Column(
                       children: [
                         panel,

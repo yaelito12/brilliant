@@ -496,11 +496,35 @@ void main() {
       expect(boton.dy, greaterThan(tab.bottom));
     });
 
+    testWidgets('con el teléfono acostado el panel va a la derecha', (
+      tester,
+    ) async {
+      await abrirApp(tester, tamano: pantallaAcostada);
+      await comenzarPartida(tester);
+
+      final tab = tester.getRect(tablero());
+      final boton = tester.getTopLeft(find.text('Tirar dados'));
+      expect(boton.dx, greaterThan(tab.right));
+      // El tablero aprovecha el alto: antes, con el panel abajo, quedaba
+      // reducido a una franja.
+      expect(tab.height, greaterThan(pantallaAcostada.height / 2));
+    });
+
+    testWidgets('la barra superior es más baja con el teléfono acostado', (
+      tester,
+    ) async {
+      await abrirApp(tester, tamano: pantallaAcostada);
+
+      expect(tester.getSize(find.byType(AppBar)).height, lessThan(56));
+    });
+
     for (final tamano in const [
       Size(1920, 1080),
       Size(1280, 800),
       Size(768, 1024),
       Size(390, 844),
+      Size(844, 390),
+      Size(667, 375),
     ]) {
       testWidgets(
         'sin desbordes en ${tamano.width.toInt()}x${tamano.height.toInt()}',

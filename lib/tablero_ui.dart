@@ -327,6 +327,12 @@ class _TableroViewState extends State<_TableroView> {
                         ),
                         backgroundColor: Colors.teal.shade700,
                         foregroundColor: Colors.white,
+                        // Teléfono acostado: barra más baja, para que el alto
+                        // que queda sea casi todo para el tablero
+                        toolbarHeight:
+                            MediaQuery.sizeOf(context).height < altoPantallaBaja
+                            ? 44
+                            : null,
                         // Sin flecha de regreso: se sale con Rendirse/Salir
                         automaticallyImplyLeading: false,
                         actions: [
@@ -351,15 +357,22 @@ class _TableroViewState extends State<_TableroView> {
                             tablero: partida.tablero ?? _tableroConIniciales(),
                           );
 
-                          // Pantalla ancha: panel justo a la derecha del tablero
-                          if (constraints.maxWidth >= anchoPantallaAncha) {
-                            const anchoPanel = 320.0;
+                          // Pantalla ancha o teléfono acostado: panel justo a
+                          // la derecha del tablero. El tablero se lleva todo
+                          // el alto que haya y el panel se queda con el ancho
+                          // que sobra (en la computadora, los 320 de siempre).
+                          if (panelAlLado(constraints)) {
+                            final disponible =
+                                constraints.maxWidth -
+                                64 -
+                                2 * _anchoIndicadores;
                             final lado = min(
                               min(constraints.maxHeight - 32, 640.0),
-                              constraints.maxWidth -
-                                  anchoPanel -
-                                  64 -
-                                  2 * _anchoIndicadores,
+                              disponible - anchoPanelMinimo,
+                            );
+                            final anchoPanel = min(
+                              anchoPanelMaximo,
+                              disponible - lado,
                             );
                             return Center(
                               child: Row(
@@ -1569,6 +1582,28 @@ const _anchoIndicadores = 48.0;
 /// usan igual la partida de un jugador y la partida en línea, para que las
 /// dos cambien de forma en el mismo punto.
 const anchoPantallaAncha = 900.0;
+
+/// Debajo de este alto la pantalla se considera baja: es el teléfono
+/// acostado. Ahí las barras se achican para dejarle el alto al tablero.
+const altoPantallaBaja = 500.0;
+
+/// Ancho mínimo para intentar el panel al lado en una pantalla que no llega
+/// a [anchoPantallaAncha]: el teléfono acostado más angosto ronda los 600 px.
+const _anchoMinimoAcostado = 560.0;
+
+/// Ancho del panel lateral: el de siempre en la computadora y el mínimo
+/// aceptable cuando hay que repartir el ancho con el tablero.
+const anchoPanelMaximo = 320.0;
+const anchoPanelMinimo = 230.0;
+
+/// ¿El panel va al lado del tablero en vez de debajo?
+///
+/// Sí en pantallas anchas y también con el teléfono acostado: ahí sobra
+/// ancho y falta alto, así que dejar el panel abajo deja el tablero
+/// diminuto. Lo usan la partida de un jugador y la de en línea.
+bool panelAlLado(BoxConstraints c) =>
+    c.maxWidth >= anchoPantallaAncha ||
+    (c.maxWidth > c.maxHeight && c.maxWidth >= _anchoMinimoAcostado);
 
 /// Símbolo de la regla de cada tipo, como en la hoja del nivel.
 String simboloDeTipo(Tipo tipo) {

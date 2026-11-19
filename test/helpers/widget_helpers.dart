@@ -16,6 +16,9 @@ const colorTexto = Color(0xFF1B3B4D);
 const pantallaAncha = Size(1280, 800);
 const pantallaAngosta = Size(390, 844);
 
+/// El mismo teléfono de [pantallaAngosta] pero acostado.
+const pantallaAcostada = Size(844, 390);
+
 /// Ajusta el tamaño de la ventana de prueba y lo restaura al terminar.
 void usarPantalla(WidgetTester tester, Size tamano) {
   tester.view.physicalSize = tamano;

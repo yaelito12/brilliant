@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../helpers/widget_helpers.dart' show pantallaAngosta;
+import '../helpers/widget_helpers.dart' show pantallaAcostada, pantallaAngosta;
 import 'fakes.dart';
 import 'lobby_helpers.dart';
 
@@ -534,6 +534,20 @@ void main() {
 
     testWidgets('sin desbordes en un teléfono', (tester) async {
       await enPartida(tester, partidaJson(), tamano: pantallaAngosta);
+      expect(tester.takeException(), isNull);
+      await cerrar(tester);
+    });
+
+    testWidgets('con el teléfono acostado el panel va al lado del tablero', (
+      tester,
+    ) async {
+      await enPartida(tester, partidaJson(), tamano: pantallaAcostada);
+
+      final tab = tester.getRect(find.byKey(const Key('tablero-mp')));
+      expect(tester.getTopLeft(find.byKey(const Key('pasar'))).dx,
+          greaterThan(tab.right));
+      // El tablero aprovecha el alto en vez de quedar en una franja.
+      expect(tab.height, greaterThan(pantallaAcostada.height / 2));
       expect(tester.takeException(), isNull);
       await cerrar(tester);
     });

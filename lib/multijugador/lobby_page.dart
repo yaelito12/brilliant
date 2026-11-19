@@ -12,6 +12,7 @@ import '../auth/auth_repository.dart';
 import '../avisos.dart';
 import '../menu_mapas.dart';
 import '../sonidos.dart';
+import '../tablero_ui.dart' show altoPantallaBaja;
 import '../teclado_web.dart';
 import 'conexion_multijugador.dart';
 import 'lobby_bloc.dart';
@@ -159,6 +160,12 @@ class _VistaLobbyState extends State<_VistaLobby> {
                 ),
                 backgroundColor: Colors.teal.shade700,
                 foregroundColor: Colors.white,
+                // Teléfono acostado: barra más baja, para dejarle el alto al
+                // tablero de la partida
+                toolbarHeight:
+                    MediaQuery.sizeOf(context).height < altoPantallaBaja
+                    ? 44
+                    : null,
                 leading: BackButton(onPressed: () => _volver(context)),
               ),
               body: BlocBuilder<LobbyBloc, LobbyState>(
