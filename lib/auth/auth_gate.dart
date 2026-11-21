@@ -25,19 +25,35 @@ class AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final config = this.config;
-    if (config == null || !config.sePuedeCambiar) return _pantalla(null);
+    if (config == null || !config.sePuedeCambiar) {
+      return _pantalla(context, null);
+    }
     // La pantalla se rehace al elegir (o cambiar) el servidor.
     return ListenableBuilder(
       listenable: config,
-      builder: (context, _) => _pantalla(config),
+      builder: (context, _) => _pantalla(context, config),
     );
   }
 
-  Widget _pantalla(ConfigServidor? config) {
+  /// Al guardar la dirección del servidor se borra el aviso de error que
+  /// hubiera (por ejemplo, el "no se pudo conectar" del arranque, cuando la
+  /// dirección guardada ya no servía) y se vuelve a intentar la sesión con la
+  /// dirección nueva: así no queda en pantalla un aviso rojo que ya no es
+  /// cierto.
+  void _alGuardarServidor(BuildContext context) =>
+      context.read<AuthBloc>()
+        ..add(AuthMensajesLimpiados())
+        ..add(AuthIniciada());
+
+  Widget _pantalla(BuildContext context, ConfigServidor? config) {
     // Primera vez en el móvil: sin dirección del servidor no se puede ni
     // iniciar sesión, así que lo primero es preguntarla.
     if (config != null && !config.configurado) {
-      return ServidorPage(config: config, primeraVez: true);
+      return ServidorPage(
+        config: config,
+        primeraVez: true,
+        alGuardar: () => _alGuardarServidor(context),
+      );
     }
 
     // Si la sesión se cierra (también desde el servidor, porque se entró con
@@ -72,7 +88,10 @@ class AuthGate extends StatelessWidget {
                 ),
               );
             case AuthEstado.noAutenticado:
-              return AuthPage(config: config);
+              return AuthPage(
+                config: config,
+                alGuardarServidor: () => _alGuardarServidor(context),
+              );
           }
         },
       ),

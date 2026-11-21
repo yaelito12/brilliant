@@ -14,7 +14,10 @@ class AuthPage extends StatefulWidget {
   /// Si se puede elegir el servidor, al pie se muestra cuál está elegido.
   final ConfigServidor? config;
 
-  const AuthPage({super.key, this.config});
+  /// Se llama al guardar la dirección del servidor desde ese pie.
+  final VoidCallback? alGuardarServidor;
+
+  const AuthPage({super.key, this.config, this.alGuardarServidor});
 
   @override
   State<AuthPage> createState() => _AuthPageState();
@@ -31,7 +34,9 @@ class _AuthPageState extends State<AuthPage> {
   @override
   Widget build(BuildContext context) {
     final config = widget.config;
-    final pie = config == null ? null : BotonServidor(config: config);
+    final pie = config == null
+        ? null
+        : BotonServidor(config: config, alGuardar: widget.alGuardarServidor);
     return _registro
         ? RegisterPage(onIrALogin: () => _cambiar(false), pie: pie)
         : LoginPage(onIrARegistro: () => _cambiar(true), pie: pie);

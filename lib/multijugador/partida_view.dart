@@ -143,6 +143,7 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
       ancla: esMio ? _ancla : null,
       destinos: jugadas.destinos,
       destinosTentativos: jugadas.tentativos,
+      numeroAColocar: jugadas.numero,
       lugares: viendo.lugares,
       lugaresOcupados: _partida.lugaresOcupados,
       onTap: esMio && _puedoJugar
@@ -250,6 +251,7 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
     Set<Coordenada> anclas,
     Set<Coordenada> destinos,
     Set<Coordenada> tentativos,
+    int? numero,
   })
   _jugadasPosibles(Tablero tablero, Map<Coordenada, int> celdas) {
     final dados = _partida.dados;
@@ -258,11 +260,17 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
         !_puedoJugar ||
         !_partida.jugando ||
         dados == null) {
-      return (anclas: const {}, destinos: const {}, tentativos: const {});
+      return (
+        anclas: const {},
+        destinos: const {},
+        tentativos: const {},
+        numero: null,
+      );
     }
     final anclas = anclasPosibles(tablero, celdas, dados);
     final ancla = _ancla;
-    final destinos = ancla == null || !anclas.contains(ancla)
+    final hayAncla = ancla != null && anclas.contains(ancla);
+    final destinos = !hayAncla
         ? const <Coordenada>{}
         : destinosPosibles(
             tablero,
@@ -280,7 +288,18 @@ class _PartidaMultijugadorViewState extends State<PartidaMultijugadorView> {
               if (celdas[a] == valor)
                 ...destinosPosibles(tablero, celdas, a, otroDado(dados, valor)),
           };
-    return (anclas: anclas, destinos: destinos, tentativos: tentativos);
+    // Número que se pondría: se dibuja en claro en las casillas marcadas.
+    final numero = hayAncla
+        ? otroDado(dados, celdas[ancla]!)
+        : tentativos.isEmpty
+        ? null
+        : otroDado(dados, valor!);
+    return (
+      anclas: anclas,
+      destinos: destinos,
+      tentativos: tentativos,
+      numero: numero,
+    );
   }
 
   void _tocar(

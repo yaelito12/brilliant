@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:brilliant/auth/auth_gate.dart';
+import 'package:brilliant/auth/auth_models.dart';
 import 'package:brilliant/auth/config_servidor.dart';
 import 'package:brilliant/bloc/auth_bloc.dart';
 import 'package:brilliant/bloc/auth_event.dart';
@@ -97,5 +98,41 @@ void main() {
 
     expect(config.url, 'http://192.168.1.9:4000');
     expect(find.text('Servidor: 192.168.1.9:4000'), findsOneWidget);
+  });
+
+  testWidgets('al guardar el servidor se quita el aviso de conexión de antes', (
+    tester,
+  ) async {
+    // Al arrancar, la dirección guardada ya no sirve (la PC cambió de IP):
+    // no se puede continuar la sesión y sale el aviso rojo.
+    usarPantalla(tester, pantallaAncha);
+    final t = crearRepo();
+    await t.almacen.guardarRefreshToken('refresh-1');
+    t.api.onRefresh = (_) async => throw const AuthException.red();
+    final bloc = AuthBloc(t.repo)..add(AuthIniciada());
+    addTearDown(bloc.close);
+    final config = ConfigServidor(
+      urlInicial: '10.0.0.1',
+      almacen: AlmacenServidorEnMemoria(),
+      sePuedeCambiar: true,
+    );
+    await tester.pumpWidget(
+      BlocProvider.value(
+        value: bloc,
+        child: MyApp(home: AuthGate(config: config)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('No se pudo conectar'), findsOneWidget);
+
+    // Con la dirección nueva el aviso viejo ya no es cierto: se va, y no hay
+    // que esperar a escribir en los campos para que desaparezca.
+    t.api.onRefresh = (_) async => throw errorApi(401, 'refresh_invalido');
+    await tester.tap(find.text('Servidor: 10.0.0.1:3000'));
+    await tester.pumpAndSettle();
+    await escribir(tester, '192.168.1.9');
+
+    expect(find.textContaining('No se pudo conectar'), findsNothing);
+    expect(find.text('Inicia sesión'), findsOneWidget);
   });
 }

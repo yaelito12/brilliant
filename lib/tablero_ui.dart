@@ -495,6 +495,7 @@ class _TableroViewState extends State<_TableroView> {
       ancla: partida.ancla,
       destinos: partida.destinosPosibles,
       destinosTentativos: partida.destinosTentativos,
+      numeroAColocar: partida.numeroAColocar,
       onTap: (c) => _alTocarCelda(context, c),
     );
   }
@@ -800,6 +801,10 @@ class TableroMultijugador extends StatefulWidget {
 
   /// Opciones de colocación al tocar un dado (sin casilla ancla aún).
   final Set<Coordenada> destinosTentativos;
+
+  /// Número que se colocaría: se dibuja en claro dentro de las casillas
+  /// marcadas, para ver la jugada antes de tocarlas.
+  final int? numeroAColocar;
   final void Function(Coordenada c)? onTap;
 
   /// Lugar con el que se llenó cada zona (para tachar esos puntos).
@@ -822,6 +827,7 @@ class TableroMultijugador extends StatefulWidget {
     this.ancla,
     this.destinos = const {},
     this.destinosTentativos = const {},
+    this.numeroAColocar,
     this.onTap,
     this.lugares = const {},
     this.lugaresOcupados = const {},
@@ -852,11 +858,18 @@ class _TableroMultijugadorState extends State<TableroMultijugador>
   /// interrumpe al que lo sustituyó.
   int _generacion = 0;
 
-  Object? get _razon => widget.destinos.isEmpty && widget.seleccionada == null
+  /// Las opciones laten también al elegir el dado (destinos tentativos), que
+  /// es cuando se busca dónde podría ir el número; antes solo latían después
+  /// de tocar la casilla ancla.
+  Object? get _razon =>
+      widget.destinos.isEmpty &&
+          widget.destinosTentativos.isEmpty &&
+          widget.seleccionada == null
       ? null
       : Object.hash(
           widget.seleccionada,
           Object.hashAllUnordered(widget.destinos),
+          Object.hashAllUnordered(widget.destinosTentativos),
         );
 
   @override
@@ -1015,6 +1028,7 @@ class _TableroMultijugadorState extends State<TableroMultijugador>
             esAncla: w.ancla == c,
             esDestino: w.destinos.contains(c),
             esDestinoTentativo: w.destinosTentativos.contains(c),
+            numeroFantasma: w.numeroAColocar,
             pulso: _pulso.value,
             claveValor: 'c${c.fila}-${c.columna}',
           ),
@@ -1043,6 +1057,10 @@ class CeldaTablero extends StatelessWidget {
   /// número a colocar. Lleva un contorno suave.
   final bool esDestinoTentativo;
 
+  /// Número que se pondría en esta casilla. Se dibuja en claro dentro de las
+  /// casillas marcadas, como anticipo de la jugada.
+  final int? numeroFantasma;
+
   /// 0..1: fase del latido (para destinos y la casilla elegida).
   final double pulso;
 
@@ -1062,6 +1080,7 @@ class CeldaTablero extends StatelessWidget {
     required this.esAncla,
     required this.esDestino,
     this.esDestinoTentativo = false,
+    this.numeroFantasma,
     required this.pulso,
     required this.claveValor,
   });
@@ -1086,19 +1105,19 @@ class CeldaTablero extends StatelessWidget {
         3.5,
       );
     } else if (esDestino) {
-      // Contorno discreto: late apenas para llamar la atención sin tapar
-      // la casilla (en teléfonos las casillas son chicas).
-      (borde, grosor) = (
-        colorTextoTablero.withValues(alpha: 0.85),
-        2 + latido,
-      );
+      // Donde se puede poner el número: el contorno más marcado del tablero
+      // después del ancla. Oscuro y grueso, con anillo blanco adentro y un
+      // halo que late, para que se vea sobre cualquier color de zona.
+      (borde, grosor) = (colorTextoTablero, 3 + latido);
     } else if (esAncla) {
       (borde, grosor) = (Colors.white, 4);
     } else if (esAnclaPosible) {
       (borde, grosor) = (colorTextoTablero.withValues(alpha: 0.75), 2);
     } else if (esDestinoTentativo) {
-      // Opción de colocación al tocar un dado (aún sin casilla ancla)
-      (borde, grosor) = (colorTextoTablero.withValues(alpha: 0.4), 2);
+      // Opción de colocación al tocar un dado (aún sin casilla ancla): casi
+      // tan marcada como un destino, porque es lo primero que se mira al
+      // elegir el dado. Lo que la diferencia es que no lleva halo.
+      (borde, grosor) = (colorTextoTablero.withValues(alpha: 0.85), 2.5);
     } else {
       (borde, grosor) = (Colors.white.withValues(alpha: 0.45), 1.5);
     }
@@ -1134,6 +1153,14 @@ class CeldaTablero extends StatelessWidget {
               blurRadius: 8,
               spreadRadius: 2,
             ),
+          // Halo de las casillas donde se puede poner el número: las
+          // despega del resto del tablero aunque el latido ya se haya
+          // acabado.
+          if (esDestino)
+            BoxShadow(
+              color: colorTextoTablero.withValues(alpha: 0.3 + 0.3 * latido),
+              blurRadius: 5 + 5 * latido,
+            ),
           if (seleccionada)
             BoxShadow(
               color: Colors.orange.withValues(alpha: 0.35 + 0.35 * latido),
@@ -1159,18 +1186,34 @@ class CeldaTablero extends StatelessWidget {
                 ),
               ),
             ),
+          // Las casillas donde se puede poner el número se ven encendidas:
+          // un velo claro sobre el color de la zona. Antes solo cambiaba el
+          // contorno y, sobre los colores oscuros, se perdía.
+          if (esDestino || esDestinoTentativo)
+            DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                color: Colors.white.withValues(
+                  alpha: esDestino
+                      ? 0.34 + 0.12 * latido
+                      : 0.22 + 0.12 * latido,
+                ),
+              ),
+            ),
           // Anillo interior: doble contraste, se ve sobre cualquier color.
-          if (esDestino || esAncla)
+          if (esDestino || esAncla || esDestinoTentativo)
             Padding(
               padding: const EdgeInsets.all(1),
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(5),
                   border: Border.all(
-                    color: esDestino
-                        ? Colors.white.withValues(alpha: 0.85)
-                        : colorTextoTablero,
-                    width: esDestino ? 1 : 1.5,
+                    color: esAncla
+                        ? colorTextoTablero
+                        : Colors.white.withValues(
+                            alpha: esDestino ? 0.95 : 0.75,
+                          ),
+                    width: esDestino ? 2 : 1.5,
                   ),
                 ),
               ),
@@ -1223,6 +1266,27 @@ class CeldaTablero extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.9),
                     shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            )
+          else if (numeroFantasma != null &&
+              (esDestino || esDestinoTentativo))
+            // Anticipo del número que quedaría aquí al tocar la casilla.
+            Center(
+              child: FittedBox(
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Text(
+                    '$numeroFantasma',
+                    key: const Key('numero-fantasma'),
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: colorTextoTablero.withValues(
+                        alpha: esDestino ? 0.62 : 0.45,
+                      ),
+                    ),
                   ),
                 ),
               ),

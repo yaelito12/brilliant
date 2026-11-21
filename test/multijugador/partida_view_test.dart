@@ -242,6 +242,26 @@ void main() {
       expect(mensaje(tester), 'Toca un 1 o un 3 de tu tablero como ancla.');
       await cerrar(tester);
     });
+
+    testWidgets('las opciones muestran en claro el número que se pondría', (tester) async {
+      await enPartida(tester, partidaJson(dados: [1, 3]));
+      await tester.pump(const Duration(seconds: 2)); // que terminen de caer
+      CeldaTablero celdaDe(int f, int c) => tester.widget<CeldaTablero>(
+          find.descendant(of: celda(f, c), matching: find.byType(CeldaTablero)));
+      expect(celdaDe(0, 1).numeroFantasma, isNull, reason: 'sin dado elegido no hay jugada');
+
+      // Con el dado elegido, las opciones ya anticipan el otro número.
+      await tester.tap(find.byKey(const ValueKey('dado-0'))); // el 1
+      await avanzar(tester);
+      expect(celdaDe(0, 1).numeroFantasma, 3);
+
+      // Y con la casilla ancla elegida, igual.
+      await tester.tap(celda(0, 2));
+      await avanzar(tester);
+      expect(celdaDe(0, 1).esDestino, isTrue);
+      expect(celdaDe(0, 1).numeroFantasma, 3);
+      await cerrar(tester);
+    });
   });
 
   group('rondas', () {

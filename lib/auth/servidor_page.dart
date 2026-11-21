@@ -21,11 +21,18 @@ class ServidorPage extends StatefulWidget {
   /// anterior era de otro servidor, así que ya no sirve.
   final void Function(String nueva)? alCambiar;
 
+  /// Se llama al guardar una dirección válida, haya cambiado o no. El inicio
+  /// de sesión lo usa para borrar el aviso de "no se pudo conectar" de antes
+  /// y volver a intentarlo con esta dirección: si no, el aviso viejo se
+  /// quedaba en pantalla aunque la dirección nueva ya funcionara.
+  final VoidCallback? alGuardar;
+
   const ServidorPage({
     super.key,
     required this.config,
     this.primeraVez = false,
     this.alCambiar,
+    this.alGuardar,
   });
 
   /// Abre la pantalla encima de la actual (desde el menú de la cuenta o desde
@@ -34,9 +41,14 @@ class ServidorPage extends StatefulWidget {
     BuildContext context,
     ConfigServidor config, {
     void Function(String nueva)? alCambiar,
+    VoidCallback? alGuardar,
   }) => Navigator.of(context).push(
     MaterialPageRoute<void>(
-      builder: (_) => ServidorPage(config: config, alCambiar: alCambiar),
+      builder: (_) => ServidorPage(
+        config: config,
+        alCambiar: alCambiar,
+        alGuardar: alGuardar,
+      ),
     ),
   );
 
@@ -110,6 +122,7 @@ class _ServidorPageState extends State<ServidorPage> {
       return;
     }
     if (cambio) widget.alCambiar?.call(direccion);
+    widget.alGuardar?.call();
     if (!mounted) return;
     // En la primera vez no hay nada debajo: el AuthGate cambia solo de
     // pantalla al quedar configurado el servidor.
@@ -182,7 +195,15 @@ class BotonServidor extends StatelessWidget {
   /// Se llama al guardar una dirección distinta a la que había.
   final void Function(String nueva)? alCambiar;
 
-  const BotonServidor({super.key, required this.config, this.alCambiar});
+  /// Se llama al guardar una dirección válida, haya cambiado o no.
+  final VoidCallback? alGuardar;
+
+  const BotonServidor({
+    super.key,
+    required this.config,
+    this.alCambiar,
+    this.alGuardar,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -196,8 +217,12 @@ class BotonServidor extends StatelessWidget {
               ? 'Servidor: ${config.paraMostrar}'
               : 'Elegir servidor',
         ),
-        onPressed: () =>
-            ServidorPage.abrir(context, config, alCambiar: alCambiar),
+        onPressed: () => ServidorPage.abrir(
+          context,
+          config,
+          alCambiar: alCambiar,
+          alGuardar: alGuardar,
+        ),
       ),
     );
   }
